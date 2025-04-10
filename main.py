@@ -2,7 +2,13 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import logging
 import sys
-app = FastAPI()
+from app.core.config import settings
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    debug=settings.DEBUG
+)
 
 # Get the root logger
 logger = logging.getLogger(__name__)
