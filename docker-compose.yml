@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16
+    container_name: carmodpicker_db
+    env_file:
+      - .env # Load environment variables from .env file
+    ports:
+      - "2610:5432" # Map local port 5432 to container port 5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  fastapi_backend:
+    build: app # Build the image from the Dockerfile in the app director
+    container_name: carmodpicker_backend
+    env_file:
+      - .env # Load environment variables from .env file
+    ports:
+      - "8000:8000" # Map host port 8000 to container port 8000 (uvicorn default)
+    depends_on:
+      - db # Ensure the db service starts before the backend
+volumes:
+  postgres_data:

@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # Database settings
-    DATABASE_URL: str = "sqlite:///./test.db"
+    DATABASE_URL: str = "sqlite:///./test.db" #will load url from env but will fallback to this if not found
     
     # JWT Auth
     SECRET_KEY: str = Field(..., env="SECRET_KEY")

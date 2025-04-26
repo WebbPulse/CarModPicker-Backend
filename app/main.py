@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import logging
 import sys
-from app.core.config import settings
+from core.config import settings
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
