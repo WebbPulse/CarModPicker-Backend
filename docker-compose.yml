@@ -9,7 +9,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
   fastapi_backend:
-    build: app # Build the image from the Dockerfile in the app director
+    build:
+      context: .  # Use project root as build context
+      dockerfile: app/Dockerfile  # Specify Dockerfile location
     container_name: carmodpicker_backend
     env_file:
       - .env # Load environment variables from .env file
