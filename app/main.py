@@ -74,17 +74,15 @@ async def delete_item(item_id: int, db: Session = Depends(get_db)): # Inject db 
     db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
     if db_item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-
+    
+    # Convert the SQLAlchemy model to the Pydantic model *before* deleting
+    deleted_item_data = ItemRead.model_validate(db_item)
+    
     db.delete(db_item)
     db.commit()
-    logger.info(msg=f'Item deleted from database: {db_item}')
-    # Return the deleted item data (it's no longer in db_item after commit usually,
-    # but we captured its state before deleting)
-    # For consistency, we might return a confirmation message or the ItemRead representation
-    # before deletion. Let's return the object as it was before deletion.
-    # Note: Accessing attributes after deletion might raise errors depending on session state.
-    # A safer approach is to construct the response from data captured before deletion
-    # or simply return a success message. For this example, returning the object state.
-    return db_item # Be cautious with this in complex scenarios
+    # Log the deleted item data
+    logger.info(msg=f'Item deleted from database: {deleted_item_data}')
+    return deleted_item_data
+    
 
 
