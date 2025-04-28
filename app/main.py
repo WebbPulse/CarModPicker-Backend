@@ -1,8 +1,16 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 import logging
 import sys
 from core.config import settings
+from sqlalchemy.orm import Session
+from db.session import get_db, engine
+from db.base import Base  # Import Base for table creation
+from api.models.item import Item as DBItem
+from api.schemas.item import ItemCreate, ItemRead
+
+# Create database tables (For PoC, use Alembic for production)
+# Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -10,11 +18,10 @@ app = FastAPI(
     debug=settings.DEBUG
 )
 
-# Get the root logger
+# Logger setup
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Set the minimum logging level
+logger.setLevel(logging.DEBUG)  
 console_handler = logging.StreamHandler(sys.stdout)
-
 console_handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(formatter)
@@ -24,45 +31,58 @@ logger.addHandler(console_handler)
 def read_root():
     return {"Hello": "World"}
 
-# In-memory database (for demonstration purposes)
-items = []
 
-class Item(BaseModel):
-    name: str
-    description: str
-
-@app.post("/items/", response_model=Item)
-async def create_item(item: Item):
-    items.append(item)
-    logger.info(msg=f'Item added to database: {item}')
-    return item
-
-
-@app.get("/items/{item_id}", response_model=Item)
-async def read_item(item_id: int):
+@app.post("/items/", response_model=ItemRead) # Use ItemRead schema
+async def create_item(item: ItemCreate, db: Session = Depends(get_db)): # Use ItemCreate schema and inject db session
     
-    if item_id < 0 or item_id >= len(items):
+    db_item = DBItem(**item.model_dump())  # Create SQLAlchemy model instance
+    db.add(db_item)
+    db.commit() 
+    db.refresh(db_item)
+    logger.info(msg=f'Item added to database: {db_item}')
+    return db_item
+
+
+@app.get("/items/{item_id}", response_model=ItemRead)
+async def read_item(item_id: int, db: Session = Depends(get_db)):
+    
+    db_item = db.query(DBItem).filter(DBItem.id == item_id).first() # Query the database
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    logger.info(msg=f'Item retrieved from database: {db_item}')
+    return db_item
+
+@app.put("/items/{item_id}", response_model=ItemRead) # Use ItemRead schema
+async def update_item(item_id: int, item: ItemCreate, db: Session = Depends(get_db)): # Use ItemCreate schema and inject db session
+    db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    # Update model fields
+    update_data = item.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_item, key, value)
+
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    logger.info(msg=f'Item updated in database: {db_item}')
+    return db_item
+
+@app.delete("/items/{item_id}", response_model=ItemRead) # Use ItemRead schema
+async def delete_item(item_id: int, db: Session = Depends(get_db)): # Inject db session
+    db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
+    if db_item is None:
         raise HTTPException(status_code=404, detail="Item not found")
     
-    logger.info(msg=f'Item retrieved from database: {items[item_id]}')
-    return items[item_id]
-
-@app.put("/items/{item_id}", response_model=Item)
-async def update_item(item_id: int, item: Item):
-
-    if item_id < 0 or item_id >= len(items):
-        raise HTTPException(status_code=404, detail="Item not found")
+    # Convert the SQLAlchemy model to the Pydantic model *before* deleting
+    deleted_item_data = ItemRead.model_validate(db_item)
     
-    items[item_id] = item
-    logger.info(msg=f'Item updated in database: {item}')
-    return item
-
-@app.delete("/items/{item_id}", response_model=Item)
-async def delete_item(item_id: int):
-    if item_id < 0 or item_id >= len(items):
-        raise HTTPException(status_code=404, detail="Item not found")
-    deleted_item = items.pop(item_id)
-    logger.info(msg=f'Item deleted from database: {deleted_item}')
-    return deleted_item
+    db.delete(db_item)
+    db.commit()
+    # Log the deleted item data
+    logger.info(msg=f'Item deleted from database: {deleted_item_data}')
+    return deleted_item_data
+    
 
 
