@@ -1,4 +1,3 @@
-# filepath: app/api/models/item.py
 from sqlalchemy import Column, Integer, String
 from db.base_class import Base
 
