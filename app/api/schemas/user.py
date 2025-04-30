@@ -11,12 +11,13 @@ class UserCreate(BaseModel):
 
 # Schema for request body when updating a user
 class UserUpdate(BaseModel):
+    id: int
     username: Optional[str] = None
     email: Optional[EmailStr] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     disabled: Optional[bool] = None
-    password: Optional[str] = None # Add if password can be updated via standard PUT
+    password: Optional[str] = None
 
 # Schema for response body when reading a user (DO NOT include password)
 class UserRead(BaseModel):

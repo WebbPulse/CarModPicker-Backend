@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from db.session import get_db
 from api.models.user import User as DBUser
+from api.schemas.token import TokenData
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -43,16 +44,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
-
-
-# --- Pydantic Schemas for Token ---
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class TokenData(BaseModel):
-    username: Optional[str] = None
 
 
 # --- Dependency to Get Current User ---
