@@ -120,7 +120,7 @@ async def delete_user(
 ):
     # Authorization check
     if current_user.id != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this user")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this user")
     
     db_user = db.query(DBUser).filter(DBUser.id == user_id).first()
     if db_user is None:
