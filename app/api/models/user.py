@@ -6,8 +6,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
-    first_name = Column(String, index=True)
-    last_name = Column(String, index=True)
-    disabled = Column(Boolean, default=False)  # False for not disabled, True for disabled
+    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    first_name = Column(String, index=True, nullable=True)
+    last_name = Column(String, index=True, nullable=True)
+    hashed_password = Column(String, nullable=False)
+    disabled = Column(Boolean, default=False, nullable=False)

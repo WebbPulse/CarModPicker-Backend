@@ -5,9 +5,9 @@ from typing import Optional
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
+    password: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    # password: str # Add password field if needed for creation
 
 # Schema for request body when updating a user
 class UserUpdate(BaseModel):
@@ -16,16 +16,16 @@ class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     disabled: Optional[bool] = None
-    # password: Optional[str] = None # Add if password can be updated
+    password: Optional[str] = None
 
-# Schema for response body when reading a user
+# Schema for response body when reading a user (DO NOT include password)
 class UserRead(BaseModel):
     id: int
     username: str
     email: EmailStr
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    disabled: bool # Represent disabled as boolean
+    disabled: bool
 
     class Config:
-        from_attributes = True # For Pydantic V2 compatibility with ORM models
+        from_attributes = True
