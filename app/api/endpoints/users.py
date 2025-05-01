@@ -108,7 +108,7 @@ async def update_user(
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    logger.info(msg=f'Item updated in database: {db_user}')
+    logger.info(msg=f'User updated in database: {db_user}')
     return db_user
 
 @router.delete("/{user_id}", response_model=UserRead)
