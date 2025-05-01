@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from api.models.user import User as DBUser
 from api.schemas.token import Token
-from api.dependencies.auth import verify_password, create_access_token, oauth2_scheme, Token # Import auth utils and Token schema
+from api.schemas.user import UserRead
+from api.dependencies.auth import verify_password, create_access_token, get_current_user
 
 router = APIRouter()
 
@@ -34,12 +35,11 @@ async def login_for_access_token(
 
     return {"access_token": access_token, "token_type": "bearer"}
 
-# You might want an endpoint to test authentication later
-# from api.dependencies.auth import get_current_user
-# from api.schemas.user import UserRead
-# @router.get("/users/me", response_model=UserRead)
-# async def read_users_me(current_user: DBUser = Depends(get_current_user)):
-#     """
-#     Fetch the current logged in user.
-#     """
-#     return current_user
+
+
+@router.get("/users/me", response_model=UserRead)
+async def read_users_me(current_user: DBUser = Depends(get_current_user)):
+    """
+    Fetch the current logged in user.
+    """
+    return current_user

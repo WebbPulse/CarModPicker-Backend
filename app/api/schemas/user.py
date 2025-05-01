@@ -11,7 +11,6 @@ class UserCreate(BaseModel):
 
 # Schema for request body when updating a user
 class UserUpdate(BaseModel):
-    id: int
     username: Optional[str] = None
     email: Optional[EmailStr] = None
     first_name: Optional[str] = None

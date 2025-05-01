@@ -6,7 +6,7 @@ from core.logging import get_logger
 from db.session import get_db
 from api.models.user import User as DBUser 
 from api.schemas.user import UserCreate, UserRead, UserUpdate
-from api.dependencies.auth import get_password_hash
+from api.dependencies.auth import get_password_hash, get_current_user
 
 router = APIRouter()
 
@@ -53,10 +53,6 @@ async def create_user(
     logger.info(msg=f'User added to database: {db_user}')
     return db_user
 
-
-
-###########Need to add auth checks to the below endpoints
-
 @router.get("/{user_id}", response_model=UserRead)
 async def read_user(
     user_id: int,
@@ -72,13 +68,20 @@ async def read_user(
     logger.info(msg=f'User retrieved from database: {db_user}')
     return db_user
 
+
 @router.put("/{user_id}", response_model=UserRead)
 async def update_user(
     user_id: int, 
     user: UserUpdate, 
     db: Session = Depends(get_db),
-    logger: logging.Logger = Depends(get_logger)
+    logger: logging.Logger = Depends(get_logger),
+    current_user: DBUser = Depends(get_current_user)
 ):
+    
+    # Authorization check
+    if current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this user")
+    
     db_user = db.query(DBUser).filter(DBUser.id == user_id).first()
     if db_user is None:
         raise HTTPException(
@@ -112,8 +115,13 @@ async def update_user(
 async def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    logger: logging.Logger = Depends(get_logger)
+    logger: logging.Logger = Depends(get_logger),
+    current_user: DBUser = Depends(get_current_user)
 ):
+    # Authorization check
+    if current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this user")
+    
     db_user = db.query(DBUser).filter(DBUser.id == user_id).first()
     if db_user is None:
         raise HTTPException(
