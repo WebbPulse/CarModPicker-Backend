@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from core.config import settings
+from ..core.config import settings
 
 # Create the SQLAlchemy engine
 # connect_args is specific to SQLite, remove or adjust for PostgreSQL if needed

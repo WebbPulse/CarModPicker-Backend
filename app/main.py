@@ -1,10 +1,10 @@
 from fastapi import FastAPI
-from core.config import settings
-from api.endpoints import auth
-from api.endpoints import users
-from api.endpoints import cars
-from api.endpoints import parts
-from api.endpoints import build_lists
+from .core.config import settings
+from .api.endpoints import auth
+from .api.endpoints import users
+from .api.endpoints import cars
+from .api.endpoints import parts
+from .api.endpoints import build_lists
 # Create database tables (For PoC, use Alembic for production)
 # Base.metadata.create_all(bind=engine)
 
@@ -14,10 +14,10 @@ app = FastAPI(
     debug=settings.DEBUG
 )
 
+app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(cars.router, prefix="/cars", tags=["cars"])
 app.include_router(parts.router, prefix="/parts", tags=["parts"])
 app.include_router(build_lists.router, prefix="/build_lists", tags=["build_lists"])
-app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(auth.router, tags=["auth"]) # Add auth router (prefix depends on tokenUrl)
 
 @app.get("/")

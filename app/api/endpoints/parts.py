@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import logging 
 
-from core.logging import get_logger
-from db.session import get_db
-from api.models.part import Part as DBPart
-from api.schemas.part import PartCreate, PartRead, PartUpdate
+from ...core.logging import get_logger
+from ...db.session import get_db
+from ...api.models.part import Part as DBPart
+from ...api.schemas.part import PartCreate, PartRead, PartUpdate
 
 router = APIRouter()
 

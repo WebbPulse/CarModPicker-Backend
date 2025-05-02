@@ -8,10 +8,10 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from core.config import settings
-from db.session import get_db
-from api.models.user import User as DBUser
-from api.schemas.token import TokenData
+from ...core.config import settings
+from ...db.session import get_db
+from ...api.models.user import User as DBUser
+from ...api.schemas.token import TokenData
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
