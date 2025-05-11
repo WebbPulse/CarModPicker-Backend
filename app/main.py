@@ -16,8 +16,9 @@ app = FastAPI(
 
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(cars.router, prefix="/cars", tags=["cars"])
-app.include_router(parts.router, prefix="/parts", tags=["parts"])
 app.include_router(build_lists.router, prefix="/build_lists", tags=["build_lists"])
+app.include_router(parts.router, prefix="/parts", tags=["parts"])
+
 app.include_router(auth.router, tags=["auth"]) # Add auth router (prefix depends on tokenUrl)
 
 @app.get("/")
