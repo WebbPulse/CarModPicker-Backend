@@ -11,6 +11,35 @@ from ...api.models.build_list import BuildList as DBBuildList
 from ...api.schemas.part import PartCreate, PartRead, PartUpdate
 from ...api.dependencies.auth import get_current_user
 
+# Shared function to verify build list ownership (via car)
+async def _verify_build_list_ownership(
+    build_list_id: int,
+    db: Session,
+    current_user: DBUser,
+    logger: logging.Logger,
+    build_list_not_found_detail: str = None,
+    authorization_detail: str = None
+) -> DBBuildList:
+    db_build_list = db.query(DBBuildList).filter(DBBuildList.id == build_list_id).first()
+    if not db_build_list:
+        detail = build_list_not_found_detail or f"Build List with id {build_list_id} not found"
+        logger.warning(f"Build list ownership verification failed: {detail} (User: {current_user.id if current_user else 'Unknown'})")
+        raise HTTPException(status_code=404, detail=detail)
+    
+    # Assuming DBBuildList has a relationship 'car' which has a 'user_id'
+    if not hasattr(db_build_list, 'car') or db_build_list.car is None:
+        # This case might indicate a data integrity issue or a build list not linked to a car
+        detail = f"Build List with id {build_list_id} is not associated with a car."
+        logger.error(f"Build list ownership verification failed: {detail} (User: {current_user.id if current_user else 'Unknown'}, BuildListID: {build_list_id})")
+        raise HTTPException(status_code=500, detail="Internal server error: Build list data is inconsistent.")
+
+    if db_build_list.car.user_id != current_user.id:
+        detail = authorization_detail or "Not authorized to perform this action on this build list"
+        logger.warning(f"Build list ownership verification failed: {detail} (User: {current_user.id}, Car Owner: {db_build_list.car.user_id})")
+        raise HTTPException(status_code=403, detail=detail)
+    
+    return db_build_list
+
 router = APIRouter()
 
 @router.post("/", response_model=PartRead)
@@ -21,11 +50,14 @@ async def create_part(
     current_user: DBUser = Depends(get_current_user)
 ):
     # Verify ownership of the build list (via the car)
-    db_build_list = db.query(DBBuildList).filter(DBBuildList.id == part.build_list_id).first()
-    if not db_build_list:
-        raise HTTPException(status_code=404, detail="Build List not found")
-    if db_build_list.car.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to add a part to this build list")
+    db_build_list = await _verify_build_list_ownership(
+        build_list_id=part.build_list_id,
+        db=db,
+        current_user=current_user,
+        logger=logger,
+        build_list_not_found_detail="Build List not found",
+        authorization_detail="Not authorized to add a part to this build list"
+    )
     
     db_part = DBPart(**part.model_dump())
     db.add(db_part)
@@ -46,8 +78,13 @@ async def read_part(
         raise HTTPException(status_code=404, detail="part not found")
     
     # Verify ownership of the build list (via the car)
-    if db_part.build_list.car.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this part")
+    await _verify_build_list_ownership(
+        build_list_id=db_part.build_list_id,
+        db=db,
+        current_user=current_user,
+        logger=logger,
+        authorization_detail="Not authorized to access this part"
+    )
 
     logger.info(msg=f'part retrieved from database: {db_part}')
     return db_part
@@ -65,19 +102,27 @@ async def update_part(
         raise HTTPException(status_code=404, detail="part not found")
 
     # Verify ownership of the current build list (via the car)
-    if db_part.build_list.car.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to update this part")
+    await _verify_build_list_ownership(
+        build_list_id=db_part.build_list_id,
+        db=db,
+        current_user=current_user,
+        logger=logger,
+        authorization_detail="Not authorized to update this part"
+    )
 
     update_data = part.model_dump(exclude_unset=True)
 
     # If build_list_id is being updated, verify ownership of the new build list
     if "build_list_id" in update_data and update_data["build_list_id"] != db_part.build_list_id:
         new_build_list_id = update_data["build_list_id"]
-        db_new_build_list = db.query(DBBuildList).filter(DBBuildList.id == new_build_list_id).first()
-        if not db_new_build_list:
-            raise HTTPException(status_code=404, detail=f"New Build List with id {new_build_list_id} not found")
-        if db_new_build_list.car.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to move part to the new build list")
+        await _verify_build_list_ownership(
+            build_list_id=new_build_list_id,
+            db=db,
+            current_user=current_user,
+            logger=logger,
+            build_list_not_found_detail=f"New Build List with id {new_build_list_id} not found",
+            authorization_detail="Not authorized to move part to the new build list"
+        )
 
     # Update model fields
     for key, value in update_data.items():
@@ -101,8 +146,13 @@ async def delete_part(
         raise HTTPException(status_code=404, detail="part not found")
 
     # Verify ownership of the build list (via the car)
-    if db_part.build_list.car.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this part")
+    await _verify_build_list_ownership(
+        build_list_id=db_part.build_list_id,
+        db=db,
+        current_user=current_user,
+        logger=logger,
+        authorization_detail="Not authorized to delete this part"
+    )
     
     # Convert the SQLAlchemy model to the Pydantic model *before* deleting
     deleted_part_data = PartRead.model_validate(db_part)

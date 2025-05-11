@@ -10,6 +10,28 @@ from ...api.models.user import User as DBUser
 from ...api.schemas.build_list import BuildListCreate, BuildListRead, BuildListUpdate
 from ...api.dependencies.auth import get_current_user
 
+# Shared function to verify car ownership
+async def _verify_car_ownership(
+    car_id: int,
+    db: Session,
+    current_user: DBUser,
+    logger: logging.Logger,
+    car_not_found_detail: str = None,
+    authorization_detail: str = None
+) -> DBCar:
+    db_car = db.query(DBCar).filter(DBCar.id == car_id).first()
+    if not db_car:
+        detail = car_not_found_detail or f"Car with id {car_id} not found"
+        logger.warning(f"Car ownership verification failed: {detail} (User: {current_user.id if current_user else 'Unknown'})")
+        raise HTTPException(status_code=404, detail=detail)
+    
+    if db_car.user_id != current_user.id:
+        detail = authorization_detail or "Not authorized to perform this action on the specified car"
+        logger.warning(f"Car ownership verification failed: {detail} (User: {current_user.id}, Car Owner: {db_car.user_id})")
+        raise HTTPException(status_code=403, detail=detail)
+    
+    return db_car
+
 router = APIRouter()
 
 @router.post("/", response_model=BuildListRead)
@@ -20,11 +42,14 @@ async def create_build_list(
     current_user: DBUser = Depends(get_current_user)
 ):
     # Verify car ownership
-    db_car = db.query(DBCar).filter(DBCar.id == build_list.car_id).first()
-    if not db_car:
-        raise HTTPException(status_code=404, detail="Car not found")
-    if db_car.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to create a build list for this car")
+    db_car = await _verify_car_ownership(
+        car_id=build_list.car_id,
+        db=db,
+        current_user=current_user,
+        logger=logger,
+        car_not_found_detail="Car not found",
+        authorization_detail="Not authorized to create a build list for this car"
+    )
 
     db_build_list = DBBuildList(**build_list.model_dump())
     db.add(db_build_list)
@@ -60,18 +85,26 @@ async def update_build_list(
         raise HTTPException(status_code=404, detail="Build List not found")
 
     # Verify car ownership for the build list
-    if db_build_list.car.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to update this build list")
+    await _verify_car_ownership(
+        car_id=db_build_list.car_id,
+        db=db,
+        current_user=current_user,
+        logger=logger,
+        authorization_detail="Not authorized to update this build list"
+    )
 
     # If car_id is being updated, verify ownership of the new car
     update_data = build_list.model_dump(exclude_unset=True)
     if "car_id" in update_data and update_data["car_id"] != db_build_list.car_id:
         new_car_id = update_data["car_id"]
-        db_new_car = db.query(DBCar).filter(DBCar.id == new_car_id).first()
-        if not db_new_car:
-            raise HTTPException(status_code=404, detail=f"New car with id {new_car_id} not found")
-        if db_new_car.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to associate build list with the new car")
+        await _verify_car_ownership(
+            car_id=new_car_id,
+            db=db,
+            current_user=current_user,
+            logger=logger,
+            car_not_found_detail=f"New car with id {new_car_id} not found",
+            authorization_detail="Not authorized to associate build list with the new car"
+        )
 
     # Update model fields
     for key, value in update_data.items():
@@ -95,8 +128,13 @@ async def delete_build_list(
         raise HTTPException(status_code=404, detail="Build List not found")
     
     # Verify car ownership for the build list
-    if db_build_list.car.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this build list")
+    await _verify_car_ownership(
+        car_id=db_build_list.car_id,
+        db=db,
+        current_user=current_user,
+        logger=logger,
+        authorization_detail="Not authorized to delete this build list"
+    )
     
     # Convert the SQLAlchemy model to the Pydantic model *before* deleting
     deleted_build_list_data = BuildListRead.model_validate(db_build_list)
