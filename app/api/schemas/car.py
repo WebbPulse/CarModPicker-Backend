@@ -7,6 +7,7 @@ class CarCreate(BaseModel):
     model: str
     year: int
     trim: Optional[str] = None
+    vin: Optional[str] = None
 
 # Schema for request body when updating a car (all fields optional)
 class CarUpdate(BaseModel):
@@ -14,6 +15,7 @@ class CarUpdate(BaseModel):
     model: Optional[str] = None
     year: Optional[int] = None
     trim: Optional[str] = None
+    vin: Optional[str] = None
     
 
 # Schema for response body when reading a car
@@ -23,6 +25,7 @@ class CarRead(BaseModel):
     model: str
     year: int
     trim: Optional[str] = None
+    vin: Optional[str] = None
     user_id: int
 
     class Config:

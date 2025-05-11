@@ -10,6 +10,7 @@ class Car(Base):
     model = Column(String, index=True, nullable=False)
     year = Column(Integer, index=True, nullable=False)
     trim = Column(String, index=True, nullable=True)
+    vin = Column(String, index=True, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     #owner
