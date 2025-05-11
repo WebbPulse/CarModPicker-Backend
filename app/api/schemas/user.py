@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional
 
 # Schema for request body when creating a user
@@ -27,5 +27,4 @@ class UserRead(BaseModel):
     last_name: Optional[str] = None
     disabled: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

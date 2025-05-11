@@ -4,8 +4,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
-from pydantic import BaseModel
+import bcrypt
 from sqlalchemy.orm import Session
 
 from ...core.config import settings
@@ -13,21 +12,25 @@ from ...db.session import get_db
 from ...api.models.user import User as DBUser
 from ...api.schemas.token import TokenData
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # OAuth2 Scheme
-# tokenUrl should point to your login endpoint (we'll create this later)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # --- Password Utilities ---
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+def verify_password(plain_password: str, hashed_password_str: str) -> bool:
     """Verifies a plain password against a hashed password."""
-    return pwd_context.verify(plain_password, hashed_password)
+    # Ensure hashed_password_str is bytes, as bcrypt expects
+    hashed_password_bytes = hashed_password_str.encode('utf-8')
+    plain_password_bytes = plain_password.encode('utf-8')
+    return bcrypt.checkpw(plain_password_bytes, hashed_password_bytes)
 
 def get_password_hash(password: str) -> str:
     """Hashes a plain password."""
-    return pwd_context.hash(password)
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed_bytes = bcrypt.hashpw(password_bytes, salt)
+    # Store as string
+    return hashed_bytes.decode('utf-8')
 
 # --- JWT Utilities ---
 

@@ -17,6 +17,8 @@ uvicorn==0.34.0
 sqlalchemy
 psycopg2-binary
 alembic
-passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
+pytest
+httpx
+bcrypt
