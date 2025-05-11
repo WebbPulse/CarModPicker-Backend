@@ -34,7 +34,10 @@ async def _verify_car_ownership(
 
 router = APIRouter()
 
-@router.post("/", response_model=BuildListRead)
+@router.post("/", response_model=BuildListRead, responses={
+    400: {"description": "Build List already exists"},
+    403: {"description": "Not authorized to create a build list"}
+})
 async def create_build_list(
     build_list: BuildListCreate,
     db: Session = Depends(get_db),
@@ -58,7 +61,10 @@ async def create_build_list(
     logger.info(msg=f'Build List added to database: {db_build_list}')
     return db_build_list
 
-@router.get("/{build_list_id}", response_model=BuildListRead)
+@router.get("/{build_list_id}", response_model=BuildListRead, responses={
+    404: {"description": "Build List not found"},
+    403: {"description": "Not authorized to access this build list"}
+})
 async def read_build_list(
     build_list_id: int,
     db: Session = Depends(get_db),
@@ -72,7 +78,10 @@ async def read_build_list(
     logger.info(msg=f'Build List retrieved from database: {db_build_list}')
     return db_build_list
 
-@router.put("/{build_list_id}", response_model=BuildListRead)
+@router.put("/{build_list_id}", response_model=BuildListRead, responses={
+    404: {"description": "Build List not found or New Car not found"},
+    403: {"description": "Not authorized to update this build list or associate it with the new car"}
+})
 async def update_build_list(
     build_list_id: int, 
     build_list: BuildListUpdate, 
@@ -116,7 +125,10 @@ async def update_build_list(
     logger.info(msg=f'Build List updated in database: {db_build_list}')
     return db_build_list
 
-@router.delete("/{build_list_id}", response_model=BuildListRead)
+@router.delete("/{build_list_id}", response_model=BuildListRead, responses={
+    404: {"description": "Build List not found"},
+    403: {"description": "Not authorized to delete this build list"}
+})
 async def delete_build_list(
     build_list_id: int,
     db: Session = Depends(get_db),

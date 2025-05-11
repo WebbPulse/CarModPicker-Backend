@@ -10,7 +10,10 @@ from ...api.dependencies.auth import get_password_hash, get_current_user
 
 router = APIRouter()
 
-@router.post("/", response_model=UserRead)
+@router.post("/", response_model=UserRead, responses={
+    400: {"description": "User already exists"},
+    403: {"description": "Not authorized to create a user"}
+})
 async def create_user(
     user: UserCreate,
     db: Session = Depends(get_db),
@@ -53,7 +56,10 @@ async def create_user(
     logger.info(msg=f'User added to database: {db_user}')
     return db_user
 
-@router.get("/{user_id}", response_model=UserRead)
+@router.get("/{user_id}", response_model=UserRead, responses={
+    404: {"description": "User not found"},
+    403: {"description": "Not authorized to access this user"}
+})
 async def read_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -69,7 +75,10 @@ async def read_user(
     return db_user
 
 
-@router.put("/{user_id}", response_model=UserRead)
+@router.put("/{user_id}", response_model=UserRead, responses={
+    404: {"description": "User not found"},
+    403: {"description": "Not authorized to update this user"}
+})
 async def update_user(
     user_id: int, 
     user: UserUpdate, 
@@ -111,7 +120,10 @@ async def update_user(
     logger.info(msg=f'User updated in database: {db_user}')
     return db_user
 
-@router.delete("/{user_id}", response_model=UserRead)
+@router.delete("/{user_id}", response_model=UserRead, responses={
+    404: {"description": "User not found"},
+    403: {"description": "Not authorized to delete this user"}
+})
 async def delete_user(
     user_id: int,
     db: Session = Depends(get_db),

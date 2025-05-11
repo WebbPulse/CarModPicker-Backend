@@ -42,7 +42,10 @@ async def _verify_build_list_ownership(
 
 router = APIRouter()
 
-@router.post("/", response_model=PartRead)
+@router.post("/", response_model=PartRead, responses={
+    400: {"description": "Part already exists"},
+    403: {"description": "Not authorized to create a part"}
+})
 async def create_part(
     part: PartCreate,
     db: Session = Depends(get_db),
@@ -66,7 +69,10 @@ async def create_part(
     logger.info(msg=f'part added to database: {db_part}')
     return db_part
 
-@router.get("/{part_id}", response_model=PartRead)
+@router.get("/{part_id}", response_model=PartRead, responses={
+    404: {"description": "Part not found"},
+    403: {"description": "Not authorized to access this part"}
+})
 async def read_part(
     part_id: int,
     db: Session = Depends(get_db),
@@ -89,7 +95,10 @@ async def read_part(
     logger.info(msg=f'part retrieved from database: {db_part}')
     return db_part
 
-@router.put("/{part_id}", response_model=PartRead)
+@router.put("/{part_id}", response_model=PartRead, responses={
+    404: {"description": "Part not found or New Build List not found"},
+    403: {"description": "Not authorized to update this part or move part to the new build list"}
+})
 async def update_part(
     part_id: int, 
     part: PartUpdate, 
@@ -134,7 +143,10 @@ async def update_part(
     logger.info(msg=f'part updated in database: {db_part}')
     return db_part
 
-@router.delete("/{part_id}", response_model=PartRead)
+@router.delete("/{part_id}", response_model=PartRead, responses={
+    404: {"description": "Part not found"},
+    403: {"description": "Not authorized to delete this part"}
+})
 async def delete_part(
     part_id: int,
     db: Session = Depends(get_db),

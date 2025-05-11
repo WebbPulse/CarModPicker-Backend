@@ -31,7 +31,10 @@ async def _verify_car_ownership(
 
 router = APIRouter()
 
-@router.post("/", response_model=CarRead)
+@router.post("/", response_model=CarRead, responses={
+    400: {"description": "Car already exists"},
+    403: {"description": "Not authorized to create a car"}
+})
 async def create_car(
     car: CarCreate,
     db: Session = Depends(get_db),
@@ -45,7 +48,10 @@ async def create_car(
     logger.info(msg=f'Car added to database: {db_car}')
     return db_car
 
-@router.get("/{car_id}", response_model=CarRead)
+@router.get("/{car_id}", response_model=CarRead, responses={
+    404: {"description": "Car not found"},
+    403: {"description": "Not authorized to access this car"}
+})
 async def read_car(
     car_id: int,
     db: Session = Depends(get_db),
@@ -61,7 +67,10 @@ async def read_car(
     logger.info(msg=f'Car retrieved from database: {db_car}')
     return db_car
 
-@router.put("/{car_id}", response_model=CarRead)
+@router.put("/{car_id}", response_model=CarRead, responses={
+    404: {"description": "Car not found"},
+    403: {"description": "Not authorized to update this car"}
+})
 async def update_car(
     car_id: int, 
     car: CarUpdate, 
@@ -88,7 +97,10 @@ async def update_car(
     logger.info(msg=f'Car updated in database: {db_car}')
     return db_car
 
-@router.delete("/{car_id}", response_model=CarRead)
+@router.delete("/{car_id}", response_model=CarRead, responses={
+    404: {"description": "Car not found"},
+    403: {"description": "Not authorized to delete this car"}
+})
 async def delete_car(
     car_id: int,
     db: Session = Depends(get_db),
