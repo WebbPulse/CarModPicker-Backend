@@ -14,12 +14,8 @@ dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 
-# Add the 'app' directory to the Python path
-# This assumes alembic commands are run from the project root directory
-sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'app')))
-
 # Import your Base from the app's db module
-from db.base import Base 
+from app.db.base import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

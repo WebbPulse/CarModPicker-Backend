@@ -5,6 +5,7 @@ fastapi==0.115.12
 h11==0.16.0
 idna==3.10
 pydantic==2.11.3
+pydantic[email]
 pydantic-settings==2.8.1
 pydantic_core==2.33.1
 python-dotenv==1.1.0
@@ -18,3 +19,4 @@ psycopg2-binary
 alembic
 passlib[bcrypt]
 python-jose[cryptography]
+python-multipart

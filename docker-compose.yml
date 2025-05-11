@@ -5,7 +5,7 @@ services:
     env_file:
       - .env # Load environment variables from .env file
     ports:
-      - "2610:5432" # Map local port 5432 to container port 5432
+      - "5432:5432" # Map local port 5432 to container port 5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
   fastapi_backend:
