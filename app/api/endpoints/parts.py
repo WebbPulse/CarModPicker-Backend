@@ -76,22 +76,12 @@ async def create_part(
 async def read_part(
     part_id: int,
     db: Session = Depends(get_db),
-    logger: logging.Logger = Depends(get_logger),
-    current_user: DBUser = Depends(get_current_user)
+    logger: logging.Logger = Depends(get_logger)
 ):
     db_part = db.query(DBPart).filter(DBPart.id == part_id).first() # Query the database
     if db_part is None:
         raise HTTPException(status_code=404, detail="part not found")
     
-    # Verify ownership of the build list (via the car)
-    await _verify_build_list_ownership(
-        build_list_id=db_part.build_list_id,
-        db=db,
-        current_user=current_user,
-        logger=logger,
-        authorization_detail="Not authorized to access this part"
-    )
-
     logger.info(msg=f'part retrieved from database: {db_part}')
     return db_part
 

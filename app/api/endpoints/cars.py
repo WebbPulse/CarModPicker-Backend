@@ -55,11 +55,9 @@ async def create_car(
 async def read_car(
     car_id: int,
     db: Session = Depends(get_db),
-    logger: logging.Logger = Depends(get_logger),
-    current_user: DBUser = Depends(get_current_user) 
+    logger: logging.Logger = Depends(get_logger)
 ):
     
-
     db_car = db.query(DBCar).filter(DBCar.id == car_id).first() 
     if db_car is None:
         raise HTTPException(status_code=404, detail="Car not found")

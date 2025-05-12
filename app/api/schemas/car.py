@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 # Schema for request body when creating/updating a car
@@ -28,5 +28,4 @@ class CarRead(BaseModel):
     vin: Optional[str] = None
     user_id: int
 
-    class Config:
-        from_attributes = True # For Pydantic V2 compatibility with ORM models
+    model_config = ConfigDict(from_attributes=True)
