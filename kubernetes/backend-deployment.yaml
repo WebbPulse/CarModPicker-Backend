@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carmodpicker-backend
+  labels:
+    app: carmodpicker-backend
+spec:
+  replicas: 2 # Adjust as needed
+  selector:
+    matchLabels:
+      app: carmodpicker-backend
+  template:
+    metadata:
+      labels:
+        app: carmodpicker-backend
+    spec:
+      containers:
+      - name: fastapi-backend
+        image: webbpulse/personal-projects:CMPB-latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        - secretRef:
+            name: backend-secrets
+        resources:
+          requests:
+            memory: "128Mi" # Adjust as needed
+            cpu: "250m"    # Adjust as needed (0.25 CPU core)
+          limits:
+            memory: "256Mi" # Adjust as needed
+            cpu: "500m"    # Adjust as needed (0.5 CPU core)
+        livenessProbe:
+          httpGet:
+            path: / 
+            port: 8000
+          initialDelaySeconds: 30 
+          periodSeconds: 30     # How often to probe
+          timeoutSeconds: 10      
+          failureThreshold: 3   
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30 # How often to probe
+          timeoutSeconds: 10
+          failureThreshold: 3

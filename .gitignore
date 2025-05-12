@@ -55,3 +55,6 @@ htmlcov/
 # Database
 *.db
 *.sqlite3
+
+# Kubernetes
+*-secrets.yaml
