@@ -5,9 +5,14 @@ services:
     env_file:
       - .env
     ports:
-      - "5432:5432" # Map local port 5432 to container port 5432
+      - "5432:5432" 
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   
   test_db:
     image: postgres:16
@@ -15,12 +20,16 @@ services:
     env_file:
       - .env.test # Load environment variables from .env.test file
     ports:
-      - "5433:5432" # Map local port 5433 to container port 5432 (different from dev db)
-    # No volume for test_db to ensure it's ephemeral and starts fresh
+      - "5433:5432" 
+    healthcheck: 
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   fastapi_backend:
     build:
-      context: .  # Use project root as build context
+      context: . 
       dockerfile: app/Dockerfile 
     container_name: carmodpicker_backend
     env_file:
@@ -28,6 +37,13 @@ services:
     ports:
       - "8000:8000" # (uvicorn default)
     depends_on:
-      - db # Ensure the db service starts before the backend
+      db:
+        condition: service_healthy 
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"] 
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s # Gives the app time to start up before first health check
 volumes:
   postgres_data:

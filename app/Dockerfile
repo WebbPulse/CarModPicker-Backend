@@ -1,18 +1,19 @@
-# Use an official Python runtime as a parent image
-FROM python:3.12-slim
-
-# Copy requirements.txt from project root
+# Stage 1: Build stage - for installing dependencies
+FROM python:3.12-slim AS builder
+WORKDIR /opt/build
 COPY requirements.txt .
+RUN python -m venv /opt/venv
+RUN /opt/venv/bin/pip install --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy only the app directory contents
+# Stage 2: Final stage - for running the application
+FROM python:3.12-slim
+WORKDIR /  
+RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
+COPY --from=builder /opt/venv /opt/venv
 COPY app/ /app/
-
-# Make port 8000 available to the world outside this container
+ENV PATH="/opt/venv/bin:$PATH"
+RUN chown -R appuser:appuser /app /opt/venv
+USER appuser
 EXPOSE 8000
-
-# Run uvicorn server when the container launches
-# Use 0.0.0.0 to allow connections from outside the container
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
