@@ -1,10 +1,13 @@
-Useful commands:
-- docker compose up -d
-    - to build the backend, the prod db, and the test db for unit tests
-- alembic upgrade head
-    - to get db schema up to date
-- pytest 
-    - to trigger unit tests
-- uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-    - To start server outside of docker
+# Prerequisites
+Before you begin, ensure you have the following installed on your system:
+- [Docker](https://www.docker.com/get-started) and Docker Compose
+- [Python 3.8+](https://www.python.org/downloads/) and `pip`
+- [Git](https://git-scm.com/)
 
+# Step-by-Step Setup
+Follow these steps to set up the backend and manage the databases:
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd <repository-directory>
