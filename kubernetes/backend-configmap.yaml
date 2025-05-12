@@ -8,4 +8,4 @@ data:
   DEBUG: "False" 
   ACCESS_TOKEN_EXPIRE_MINUTES: "60"
   # Adjust ALLOWED_ORIGINS based on your frontend's URL in production
-  ALLOWED_ORIGINS: '["http://localhost:3000"]'
+  ALLOWED_ORIGINS: '["http://localhost"]'
