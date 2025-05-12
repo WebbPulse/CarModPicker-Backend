@@ -37,9 +37,3 @@ async def login_for_access_token(
 
 
 
-@router.get("/users/me", response_model=UserRead)
-async def read_users_me(current_user: DBUser = Depends(get_current_user)):
-    """
-    Fetch the current logged in user.
-    """
-    return current_user

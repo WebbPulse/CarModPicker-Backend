@@ -69,7 +69,6 @@ async def read_build_list(
     build_list_id: int,
     db: Session = Depends(get_db),
     logger: logging.Logger = Depends(get_logger),
-    current_user: DBUser = Depends(get_current_user)
 ):
     db_build_list = db.query(DBBuildList).filter(DBBuildList.id == build_list_id).first() # Query the database
     if db_build_list is None:

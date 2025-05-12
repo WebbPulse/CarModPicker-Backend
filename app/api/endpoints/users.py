@@ -10,6 +10,13 @@ from ...api.dependencies.auth import get_password_hash, get_current_user
 
 router = APIRouter()
 
+@router.get("/me", response_model=UserRead)
+async def read_users_me_route(current_user: DBUser = Depends(get_current_user)):
+    """
+    Fetch the current logged in user.
+    """
+    return current_user
+
 @router.post("/", response_model=UserRead, responses={
     400: {"description": "User already exists"},
     403: {"description": "Not authorized to create a user"}

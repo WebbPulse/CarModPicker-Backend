@@ -1,7 +1,6 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
-
+from functools import lru_cache
 
 class Settings(BaseSettings):
     # API settings
@@ -26,6 +25,13 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+@lru_cache()
+def get_settings():
+    """
+    Get cached settings.
+    For tests, this can be overridden before the first call.
+    """
+    return Settings()
 
-# Create settings instance
-settings = Settings()
+# Create settings instance for normal usage
+settings = get_settings()

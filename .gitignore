@@ -46,6 +46,7 @@ htmlcov/
 
 # Local development settings
 .env
+.env.test
 .env.local
 .env.development.local
 .env.test.local
