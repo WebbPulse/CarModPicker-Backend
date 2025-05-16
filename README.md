@@ -7,6 +7,8 @@ Useful commands:
     - to trigger unit tests
 - uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
     - To start server outside of docker
+
+
 Prerequisites:
 - .env
 - .env.test
