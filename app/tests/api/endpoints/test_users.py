@@ -8,7 +8,7 @@ from app.core.config import settings # For API prefixes or other settings if nee
 # For robust testing, auth tests should be separate, but this helps for testing protected user endpoints.
 def get_auth_headers(client: TestClient, username: str, password: str) -> dict:
     login_data = {"username": username, "password": password}
-    response = client.post(f"{settings.API_V1_STR}/token", data=login_data) # Assuming /token is at root or adjust path
+    response = client.post(f"{settings.API_STR}/token", data=login_data) # Assuming /token is at root or adjust path
     if response.status_code != 200:
         # Fallback: try token endpoint without API_V1_STR if the above fails
         response = client.post("/token", data=login_data)
