@@ -14,3 +14,4 @@ Prerequisites:
 - .env.test
 - k8s postgres secrets
 - k8s backend secrets
+- for docker debug with backend, configure a docker network with 'docker network create carmodpicker_network' 
