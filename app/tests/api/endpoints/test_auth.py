@@ -29,11 +29,11 @@ def test_login_for_access_token_success(client: TestClient, db_session: Session)
     
     # Using the API to create the user to ensure it's in a valid state
     user_data = {"username": username, "email": email, "password": password}
-    response = client.post("/users/", json=user_data)
+    response = client.post(f"{settings.API_STR}/users/", json=user_data)
     assert response.status_code == 200, f"Failed to create user for auth test: {response.text}"
 
     login_data = {"username": username, "password": password}
-    response = client.post("/token", data=login_data) # tokenUrl is relative to base
+    response = client.post(f"{settings.API_STR}/token", data=login_data) # tokenUrl is relative to base
     assert response.status_code == 200, response.text
     token = response.json()
     assert "access_token" in token
@@ -41,7 +41,7 @@ def test_login_for_access_token_success(client: TestClient, db_session: Session)
 
 def test_login_for_access_token_incorrect_username(client: TestClient):
     login_data = {"username": "wronguser", "password": "password123"}
-    response = client.post("/token", data=login_data)
+    response = client.post(f"{settings.API_STR}/token", data=login_data)
     assert response.status_code == 401
     assert response.json()["detail"] == "Incorrect username or password"
 
@@ -51,10 +51,10 @@ def test_login_for_access_token_incorrect_password(client: TestClient, db_sessio
     email = "auth_test_wrong_pass@example.com"
     
     user_data = {"username": username, "email": email, "password": password}
-    client.post("/users/", json=user_data) # Create the user
+    client.post(f"{settings.API_STR}/users/", json=user_data) # Create the user
 
     login_data = {"username": username, "password": "wrong_password"}
-    response = client.post("/token", data=login_data)
+    response = client.post(f"{settings.API_STR}/token", data=login_data)
     assert response.status_code == 401
     assert response.json()["detail"] == "Incorrect username or password"
 
@@ -65,27 +65,27 @@ def test_login_for_access_token_disabled_user(client: TestClient, db_session: Se
 
     # Create user via API
     user_data = {"username": username, "email": email, "password": password}
-    create_response = client.post("/users/", json=user_data)
+    create_response = client.post(f"{settings.API_STR}/users/", json=user_data)
     assert create_response.status_code == 200
     user_id = create_response.json()["id"]
 
     # Log in as the user to get a token to disable them
     # (or create another admin user to do this, for simplicity using the same user's token)
     login_data_for_token = {"username": username, "password": password}
-    token_response = client.post("/token", data=login_data_for_token)
+    token_response = client.post(f"{settings.API_STR}/token", data=login_data_for_token)
     assert token_response.status_code == 200
     auth_token = token_response.json()["access_token"]
     headers = {"Authorization": f"Bearer {auth_token}"}
 
     # Disable the user via API
     update_payload = {"disabled": True}
-    update_response = client.put(f"/users/{user_id}", json=update_payload, headers=headers)
+    update_response = client.put(f"{settings.API_STR}/users/{user_id}", json=update_payload, headers=headers)
     assert update_response.status_code == 200, f"Failed to disable user: {update_response.text}"
     assert update_response.json()["disabled"] is True
     
     # Attempt to login as the now disabled user
     login_data = {"username": username, "password": password}
-    response = client.post("/token", data=login_data)
+    response = client.post(f"{settings.API_STR}/token", data=login_data)
     assert response.status_code == 400, response.text # As per your auth.py logic
     assert response.json()["detail"] == "Inactive user"
 

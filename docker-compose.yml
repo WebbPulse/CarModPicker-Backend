@@ -13,7 +13,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-  
+    networks:
+      - db_network
   test_db:
     image: postgres:16
     container_name: carmodpicker_test_db
@@ -26,6 +27,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - db_network
 
   fastapi_backend:
     build:
@@ -45,5 +48,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s # Gives the app time to start up before first health check
+    networks:
+      - carmodpicker_network
+      - db_network
+
 volumes:
   postgres_data:
+
+networks:
+  carmodpicker_network:
+    external: true # Declare that this network is created outside of this compose file
+  db_network:
+    driver: bridge
