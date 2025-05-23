@@ -1,7 +1,7 @@
 services:
-  db:
+  persistant_volume_db:
     image: postgres:16
-    container_name: carmodpicker_db
+    container_name: carmodpicker_persistant_volume_db
     env_file:
       - .env
     ports:
@@ -15,9 +15,9 @@ services:
       retries: 5
     networks:
       - db_network
-  test_db:
+  unit_test_db:
     image: postgres:16
-    container_name: carmodpicker_test_db
+    container_name: carmodpicker_unit_test_db
     env_file:
       - .env.test # Load environment variables from .env.test file
     ports:
@@ -40,7 +40,7 @@ services:
     ports:
       - "8000:8000" # (uvicorn default)
     depends_on:
-      db:
+      persistant_volume_db:
         condition: service_healthy 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"] 
