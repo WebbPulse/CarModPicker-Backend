@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Cookie # Import Cookie
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 import bcrypt
@@ -12,8 +12,8 @@ from ...db.session import get_db
 from ...api.models.user import User as DBUser
 from ...api.schemas.token import TokenData
 
-# OAuth2 Scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+# OAuth2 Scheme - can remain for documentation or if you support header auth elsewhere
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token") # Corrected tokenUrl to be absolute path
 
 # --- Password Utilities ---
 
@@ -51,16 +51,24 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 # --- Dependency to Get Current User ---
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> DBUser:
-    """Decodes JWT token, validates credentials, and returns the user."""
+async def get_current_user(
+    access_token: Optional[str] = Cookie(None), # Read "access_token" cookie
+    db: Session = Depends(get_db)
+) -> DBUser:
+    """
+    Decodes JWT token from cookie, validates credentials, and returns the user.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if access_token is None:
+        raise credentials_exception
+    
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
+        payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        username: Optional[str] = payload.get("sub")
         if username is None:
             raise credentials_exception
         token_data = TokenData(username=username)
@@ -70,22 +78,36 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     user = db.query(DBUser).filter(DBUser.username == token_data.username).first()
     if user is None:
         raise credentials_exception
-    # Add checks here if needed (e.g., user.disabled)
     if user.disabled:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
     return user
 
 
-
-# --- Dependency for Optional Current User (if needed for public endpoints) ---
 async def get_current_active_user_optional(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+    access_token: Optional[str] = Cookie(None), # Read "access_token" cookie
+    db: Session = Depends(get_db)
 ) -> Optional[DBUser]:
-    if not token:
+    """
+    Optionally returns the current active user if a valid token cookie is present.
+    Returns None if no token, token is invalid/expired, user not found, or user is inactive.
+    """
+    if access_token is None:
         return None
     try:
-        return await get_current_user(token, db)
-    except HTTPException:
-        # If token is invalid/expired but present, treat as unauthenticated
-        return None
+        payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        username: Optional[str] = payload.get("sub")
+        if username is None:
+            return None # Invalid token payload
+        token_data = TokenData(username=username)
+    except JWTError: # Covers expired, invalid signature, etc.
+        return None # Token is invalid or expired
+
+    user = db.query(DBUser).filter(DBUser.username == token_data.username).first()
+    if user is None:
+        return None # User from token not found in DB
+    
+    if user.disabled:
+        return None # User is inactive, so not considered an "active user"
+
+    return user
 

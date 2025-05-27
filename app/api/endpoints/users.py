@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError # Import IntegrityError
 import logging 
 
 from ...core.logging import get_logger
@@ -84,7 +85,8 @@ async def read_user(
 
 @router.put("/{user_id}", response_model=UserRead, responses={
     404: {"description": "User not found"},
-    403: {"description": "Not authorized to update this user"}
+    403: {"description": "Not authorized to update this user"},
+    400: {"description": "Invalid input, e.g., username or email already registered"} # Added 400
 })
 async def update_user(
     user_id: int, 
@@ -96,35 +98,46 @@ async def update_user(
     
     # Authorization check
     if current_user.id != user_id:
+        logger.warning(f"User {current_user.id} attempt to update user {user_id} forbidden.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this user")
     
     db_user = db.query(DBUser).filter(DBUser.id == user_id).first()
     if db_user is None:
+        logger.warning(f"Attempt to update non-existent user {user_id}.")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
 
-    # Update model fields
-    if user.username is not None:
-        db_user.username = user.username
-    if user.email is not None:
-        db_user.email = user.email
-    if user.first_name is not None:
-        db_user.first_name = user.first_name
-    if user.last_name is not None:
-        db_user.last_name = user.last_name
-    if user.disabled is not None:
-        db_user.disabled = user.disabled
-    if user.password is not None:
-        #Hash the received password
-        hashed_password = get_password_hash(user.password)
-        db_user.hashed_password = hashed_password
+    update_data = user.model_dump(exclude_unset=True)
 
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    logger.info(msg=f'User updated in database: {db_user}')
+    if "password" in update_data and update_data["password"]:
+        hashed_password = get_password_hash(update_data["password"])
+        db_user.hashed_password = hashed_password
+        # Remove password from update_data to prevent trying to set it directly if not a model field or if handled
+        del update_data["password"] 
+    
+    for field, value in update_data.items():
+        setattr(db_user, field, value)
+    
+    try:
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        logger.info(f"User {user_id} updated successfully by user {current_user.id}.")
+    except IntegrityError as e:
+        db.rollback() # Add this line to explicitly rollback the session
+        logger.warning(f"IntegrityError during user update for user {user_id}: {e.orig}")
+        # Attempt to determine if it's a username or email conflict
+        # This parsing can be DB-specific. A more robust way is to pre-check.
+        error_detail_str = str(e.orig).lower()
+        if "users_username_key" in error_detail_str or "ix_users_username" in error_detail_str:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already registered")
+        elif "users_email_key" in error_detail_str or "ix_users_email" in error_detail_str:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+        else:
+            # Generic integrity error or other constraint violation
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A user with the provided username or email may already exist, or another integrity constraint was violated.")
     return db_user
 
 @router.delete("/{user_id}", response_model=UserRead, responses={

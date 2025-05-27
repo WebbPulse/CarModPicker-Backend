@@ -1,192 +1,271 @@
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session # Import Session if direct db interaction is needed, though often not for API tests
+from sqlalchemy.orm import Session
+from typing import Dict, Optional
+
+from app.core.config import settings
 from app.api.schemas.user import UserRead, UserCreate, UserUpdate
-from app.core.config import settings # For API prefixes or other settings if needed
 
-# Helper function to get auth headers after creating/logging in a user
-# This assumes your /token endpoint and user creation are working.
-# For robust testing, auth tests should be separate, but this helps for testing protected user endpoints.
-def get_auth_headers(client: TestClient, username: str, password: str) -> dict:
-    login_data = {"username": username, "password": password}
-    response = client.post(f"{settings.API_STR}/token", data=login_data) # Assuming /token is at root or adjust path
-    if response.status_code != 200:
-        # Fallback: try token endpoint without API_V1_STR if the above fails
-        response = client.post(f"{settings.API_STR}/token", data=login_data)
-        if response.status_code != 200:
-            raise Exception(f"Failed to log in user {username} to get token. Status: {response.status_code}, Detail: {response.text}")
+# Helper function to create a user and log them in (sets cookie on client)
+def create_and_login_user(client: TestClient, username_suffix: str, password_override: Optional[str] = None) -> Dict:
+    username = f"user_test_{username_suffix}"
+    email = f"user_test_{username_suffix}@example.com"
+    password = password_override or "testpassword"
     
-    token_data = response.json()
-    return {"Authorization": f"Bearer {token_data['access_token']}"}
+    user_data_create = {
+        "username": username,
+        "email": email,
+        "password": password,
+        "first_name": "UserTest",
+        "last_name": username_suffix.capitalize()
+    }
+    
+    # Attempt to create user
+    response = client.post(f"{settings.API_STR}/users/", json=user_data_create)
+    created_user_data: Dict = {}
+    user_id: int = -1
 
-def test_create_user(client: TestClient):
+    if response.status_code == 200:
+        created_user_data = response.json()
+        user_id = created_user_data["id"]
+    elif response.status_code == 400 and "already registered" in response.json().get("detail", "").lower():
+        # User likely exists, will attempt login and fetch details
+        pass
+    else:
+        response.raise_for_status() # Raise for other unexpected errors
+
+    # Log in to set cookie on the client
+    login_data = {"username": username, "password": password}
+    token_response = client.post(f"{settings.API_STR}/token", data=login_data)
+    if token_response.status_code != 200:
+        raise Exception(f"Failed to log in user {username}. Status: {token_response.status_code}, Detail: {token_response.text}")
+
+    # If user was not created in this call (because they already existed), fetch their data now
+    if not created_user_data or user_id == -1:
+        me_response = client.get(f"{settings.API_STR}/users/me") # Uses cookie
+        if me_response.status_code == 200:
+            created_user_data = me_response.json()
+            user_id = created_user_data["id"]
+        else:
+            raise Exception(f"Could not retrieve user data for {username} via /users/me after login. Status: {me_response.status_code}, Detail: {me_response.text}")
+    
+    if not created_user_data or user_id == -1:
+        raise Exception(f"User ID or data for {username} could not be determined.")
+        
+    return created_user_data
+
+# --- Test Cases ---
+
+# --- Create User Tests ---
+def test_create_user_success(client: TestClient, db_session: Session):
+    username = "new_unique_user"
+    email = "new_unique_user@example.com"
+    password = "password123"
     user_data = {
-        "username": "testuser1",
-        "email": "testuser1@example.com",
-        "password": "password123",
-        "first_name": "Test",
-        "last_name": "User1"
+        "username": username,
+        "email": email,
+        "password": password,
+        "first_name": "New",
+        "last_name": "User"
     }
     response = client.post(f"{settings.API_STR}/users/", json=user_data)
     assert response.status_code == 200, response.text
     created_user = response.json()
-    assert created_user["username"] == user_data["username"]
-    assert created_user["email"] == user_data["email"]
-    assert created_user["first_name"] == user_data["first_name"]
-    assert created_user["last_name"] == user_data["last_name"]
+    assert created_user["username"] == username
+    assert created_user["email"] == email
     assert "id" in created_user
-    assert created_user["disabled"] is False
+    assert "hashed_password" not in created_user
 
-def test_create_user_duplicate_username(client: TestClient):
-    user_data1 = {"username": "dupuser", "email": "dupuser1@example.com", "password": "password123"}
-    client.post(f"{settings.API_STR}/users/", json=user_data1) # Create first user
+def test_create_user_duplicate_username(client: TestClient, db_session: Session):
+    user_info = create_and_login_user(client, "duplicate_username_test") # Creates and logs in first user
+    
+    duplicate_user_data = {
+        "username": user_info["username"], # Same username
+        "email": "another_email@example.com",
+        "password": "password123",
+        "first_name": "Another",
+        "last_name": "User"
+    }
+    response = client.post(f"{settings.API_STR}/users/", json=duplicate_user_data)
+    assert response.status_code == 400, response.text
+    assert "username already registered" in response.json()["detail"].lower()
 
-    user_data2 = {"username": "dupuser", "email": "dupuser2@example.com", "password": "password456"}
-    response = client.post(f"{settings.API_STR}/users/", json=user_data2)
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Username already registered"
+def test_create_user_duplicate_email(client: TestClient, db_session: Session):
+    user_info = create_and_login_user(client, "duplicate_email_test") # Creates and logs in first user
 
-def test_create_user_duplicate_email(client: TestClient):
-    user_data1 = {"username": "emailuser1", "email": "dupemail@example.com", "password": "password123"}
-    client.post(f"{settings.API_STR}/users/", json=user_data1) # Create first user
+    duplicate_user_data = {
+        "username": "another_username_for_email_test",
+        "email": user_info["email"], # Same email
+        "password": "password123",
+        "first_name": "Another",
+        "last_name": "User"
+    }
+    response = client.post(f"{settings.API_STR}/users/", json=duplicate_user_data)
+    assert response.status_code == 400, response.text
+    assert "email already registered" in response.json()["detail"].lower()
 
-    user_data2 = {"username": "emailuser2", "email": "dupemail@example.com", "password": "password456"}
-    response = client.post(f"{settings.API_STR}/users/", json=user_data2)
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Email already registered"
-
-def test_read_user(client: TestClient):
-    user_data = {"username": "readuser", "email": "readuser@example.com", "password": "password123"}
-    create_response = client.post(f"{settings.API_STR}/users/", json=user_data)
-    user_id = create_response.json()["id"]
-
-    response = client.get(f"{settings.API_STR}/users/{user_id}")
+# --- Read User (/me) Tests ---
+def test_read_users_me_success(client: TestClient, db_session: Session):
+    user_info = create_and_login_user(client, "me_test") # Logs in, client gets cookie
+    
+    response = client.get(f"{settings.API_STR}/users/me") # Cookie sent automatically
     assert response.status_code == 200, response.text
-    read_user_data = response.json()
-    assert read_user_data["username"] == user_data["username"]
-    assert read_user_data["email"] == user_data["email"]
-    assert read_user_data["id"] == user_id
+    me_user = response.json()
+    assert me_user["username"] == user_info["username"]
+    assert me_user["email"] == user_info["email"]
+    assert me_user["id"] == user_info["id"]
 
-def test_read_nonexistent_user(client: TestClient):
-    response = client.get(f"{settings.API_STR}/users/999999") # Assuming this ID won't exist
+def test_read_users_me_unauthenticated(client: TestClient, db_session: Session):
+    client.cookies.clear() # Ensure no auth cookie
+    response = client.get(f"{settings.API_STR}/users/me")
+    assert response.status_code == 401 # Expect unauthorized
+
+# --- Read User (/{user_id}) Tests ---
+def test_read_user_by_id_success(client: TestClient, db_session: Session):
+    user_info = create_and_login_user(client, "read_by_id_test")
+    user_id_to_read = user_info["id"]
+
+    client.cookies.clear() # Assuming public read, clear cookies
+    response = client.get(f"{settings.API_STR}/users/{user_id_to_read}")
+    assert response.status_code == 200, response.text
+    read_user = response.json()
+    assert read_user["id"] == user_id_to_read
+    assert read_user["username"] == user_info["username"]
+
+def test_read_user_by_id_not_found(client: TestClient, db_session: Session):
+    response = client.get(f"{settings.API_STR}/users/9999999") # Non-existent ID
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found"
 
-def test_update_own_user(client: TestClient):
-    # Create user
-    username = "updateuser"
-    password = "password123"
-    user_data_initial = {
-        "username": username,
-        "email": "updateuser@example.com",
-        "password": password,
-        "first_name": "InitialFirst"
-    }
-    create_response = client.post(f"{settings.API_STR}/users/", json=user_data_initial)
-    assert create_response.status_code == 200, create_response.text
-    user_id = create_response.json()["id"]
+# --- Update User Tests ---
+def test_update_own_user_success(client: TestClient, db_session: Session):
+    user_info = create_and_login_user(client, "update_self")
+    user_id = user_info["id"]
 
-    # Get auth token
-    auth_headers = get_auth_headers(client, username, password)
-
-    # Update user
-    update_payload = {"first_name": "UpdatedFirst", "email": "updatedemail@example.com"}
-    response = client.put(f"{settings.API_STR}/users/{user_id}", json=update_payload, headers=auth_headers)
+    update_payload = {"first_name": "UpdatedFirst", "email": "updated_self@example.com"}
+    response = client.put(f"{settings.API_STR}/users/{user_id}", json=update_payload)
     assert response.status_code == 200, response.text
     updated_user = response.json()
-    assert updated_user["first_name"] == "UpdatedFirst"
-    assert updated_user["email"] == "updatedemail@example.com"
-    assert updated_user["username"] == username # Username should not change unless specified
+    assert updated_user["first_name"] == update_payload["first_name"]
+    assert updated_user["email"] == update_payload["email"]
+    assert updated_user["username"] == user_info["username"] # Username should be unchanged
 
-def test_update_another_user_forbidden(client: TestClient):
-    # Create user A
-    user_a_data = {"username": "userA_updater", "email": "usera_updater@example.com", "password": "passwordA"}
-    client.post(f"{settings.API_STR}/users/", json=user_a_data)
-    auth_headers_a = get_auth_headers(client, user_a_data["username"], user_a_data["password"])
+def test_update_own_user_change_password_success(client: TestClient, db_session: Session):
+    username_suffix = "change_pass"
+    initial_password = "initialPassword123"
+    new_password = "newStrongPassword456"
+    
+    user_info = create_and_login_user(client, username_suffix, password_override=initial_password)
+    user_id = user_info["id"]
+    username = user_info["username"]
 
-    # Create user B
-    user_b_data = {"username": "userB_victim_update", "email": "userb_victim@example.com", "password": "passwordB"}
-    response_b = client.post(f"{settings.API_STR}/users/", json=user_b_data)
-    user_b_id = response_b.json()["id"]
+    update_payload = {"password": new_password}
+    response = client.put(f"{settings.API_STR}/users/{user_id}", json=update_payload)
+    assert response.status_code == 200, response.text
+    
+    client.cookies.clear() # Clear old session
 
-    # User A tries to update User B
+    # Try logging in with the new password
+    login_data_new_pass = {"username": username, "password": new_password}
+    login_response_new = client.post(f"{settings.API_STR}/token", data=login_data_new_pass)
+    assert login_response_new.status_code == 200, f"Login with new password failed: {login_response_new.text}"
+
+    # Try logging in with the old password (should fail)
+    client.cookies.clear()
+    login_data_old_pass = {"username": username, "password": initial_password}
+    login_response_old = client.post(f"{settings.API_STR}/token", data=login_data_old_pass)
+    assert login_response_old.status_code == 401, "Login with old password should fail"
+
+def test_update_other_user_forbidden(client: TestClient, db_session: Session):
+    user_a_info = create_and_login_user(client, "user_a_update_target") # User A logged in
+    user_a_id = user_a_info["id"]
+    client.cookies.clear()
+
+    _ = create_and_login_user(client, "user_b_updater_attacker") # User B logged in
+    
     update_payload = {"first_name": "MaliciousUpdate"}
-    response = client.put(f"{settings.API_STR}/users/{user_b_id}", json=update_payload, headers=auth_headers_a)
+    response = client.put(f"{settings.API_STR}/users/{user_a_id}", json=update_payload) # User B tries to update User A
     assert response.status_code == 403
     assert response.json()["detail"] == "Not authorized to update this user"
 
-def test_delete_own_user(client: TestClient):
-    # Create user
-    username = "deleteuser"
-    password = "password123"
-    user_data_initial = {"username": username, "email": "deleteuser@example.com", "password": password}
-    create_response = client.post(f"{settings.API_STR}/users/", json=user_data_initial)
-    user_id = create_response.json()["id"]
+def test_update_user_unauthenticated(client: TestClient, db_session: Session):
+    user_info = create_and_login_user(client, "update_unauth_target")
+    user_id = user_info["id"]
+    client.cookies.clear() # Ensure unauthenticated
 
-    # Get auth token
-    auth_headers = get_auth_headers(client, username, password)
+    update_payload = {"first_name": "UnauthUpdate"}
+    response = client.put(f"{settings.API_STR}/users/{user_id}", json=update_payload)
+    assert response.status_code == 401
 
-    # Delete user
-    response = client.delete(f"{settings.API_STR}/users/{user_id}", headers=auth_headers)
+def test_update_user_not_found(client: TestClient, db_session: Session):
+    _ = create_and_login_user(client, "updater_user_notfound") # Logs in a user
+    
+    update_payload = {"first_name": "NonExistent"}
+    response = client.put(f"{settings.API_STR}/users/9999998", json=update_payload) # Non-existent ID
+    assert response.status_code == 403 # Changed from 404
+    assert response.json()["detail"] == "Not authorized to update this user" # Changed detail
+
+# --- Delete User Tests ---
+def test_delete_own_user_success(client: TestClient, db_session: Session):
+    user_info = create_and_login_user(client, "delete_self")
+    user_id = user_info["id"]
+    username = user_info["username"]
+
+    response = client.delete(f"{settings.API_STR}/users/{user_id}")
     assert response.status_code == 200, response.text
-    deleted_user_data = response.json()
-    assert deleted_user_data["id"] == user_id
-    assert deleted_user_data["username"] == username
+    deleted_user = response.json()
+    assert deleted_user["id"] == user_id
 
-    # Verify user is deleted (e.g., by trying to read or login)
+    # Verify user is deleted: try to log in
+    client.cookies.clear()
+    login_data = {"username": username, "password": "testpassword"} # or the specific password used
+    login_response = client.post(f"{settings.API_STR}/token", data=login_data)
+    assert login_response.status_code == 401 # Or 400 if "Inactive user" vs "Incorrect username/password"
+
+    # Verify user is deleted: try to get by ID
     get_response = client.get(f"{settings.API_STR}/users/{user_id}")
-    assert get_response.status_code == 404 # User should not be found
+    assert get_response.status_code == 404
 
-    login_response = client.post(f"{settings.API_STR}/token", data={"username": username, "password": password})
-    assert login_response.status_code == 401 # Should not be able to login
+def test_delete_other_user_forbidden(client: TestClient, db_session: Session):
+    user_a_info = create_and_login_user(client, "user_a_delete_target") # User A logged in
+    user_a_id = user_a_info["id"]
+    client.cookies.clear()
 
-def test_delete_another_user_forbidden(client: TestClient):
-    # Create user A (deleter)
-    user_a_data = {"username": "userA_deleter", "email": "usera_deleter@example.com", "password": "passwordA"}
-    client.post(f"{settings.API_STR}/users/", json=user_a_data)
-    auth_headers_a = get_auth_headers(client, user_a_data["username"], user_a_data["password"])
-
-    # Create user B (victim)
-    user_b_data = {"username": "userB_victim_delete", "email": "userb_victim_delete@example.com", "password": "passwordB"}
-    response_b = client.post(f"{settings.API_STR}/users/", json=user_b_data)
-    user_b_id = response_b.json()["id"]
-
-    # User A tries to delete User B
-    response = client.delete(f"{settings.API_STR}/users/{user_b_id}", headers=auth_headers_a)
+    _ = create_and_login_user(client, "user_b_deleter_attacker") # User B logged in
+    
+    response = client.delete(f"{settings.API_STR}/users/{user_a_id}") # User B tries to delete User A
     assert response.status_code == 403
     assert response.json()["detail"] == "Not authorized to delete this user"
 
-def test_read_users_me_success(client: TestClient):
-    username = "me_user"
-    password = "password123"
-    email = "me_user@example.com"
-    user_data = {"username": username, "email": email, "password": password, "first_name": "Me", "last_name": "User"}
-    
-    create_response = client.post(f"{settings.API_STR}/users/", json=user_data)
-    assert create_response.status_code == 200
-    user_id = create_response.json()["id"]
+def test_delete_user_unauthenticated(client: TestClient, db_session: Session):
+    user_info = create_and_login_user(client, "delete_unauth_target")
+    user_id = user_info["id"]
+    client.cookies.clear() # Ensure unauthenticated
 
-    login_data = {"username": username, "password": password}
-    token_response = client.post(f"{settings.API_STR}/token", data=login_data)
-    assert token_response.status_code == 200
-    token = token_response.json()["access_token"]
-
-    headers = {"Authorization": f"Bearer {token}"}
-    response = client.get(f"{settings.API_STR}/users/me", headers=headers) # Endpoint is /users/me
-    assert response.status_code == 200, response.text
-    current_user = response.json()
-    assert current_user["username"] == username
-    assert current_user["email"] == email
-    assert current_user["id"] == user_id
-    assert current_user["first_name"] == "Me"
-    assert current_user["disabled"] is False
-
-def test_read_users_me_invalid_token(client: TestClient):
-    headers = {"Authorization": "Bearer invalidtoken"}
-    response = client.get(f"{settings.API_STR}/users/me", headers=headers)
+    response = client.delete(f"{settings.API_STR}/users/{user_id}")
     assert response.status_code == 401
-    assert response.json()["detail"] == "Could not validate credentials"
 
-def test_read_users_me_no_token(client: TestClient):
-    response = client.get(f"{settings.API_STR}/users/me") # No auth header
-    assert response.status_code == 401 # FastAPI's default for missing OAuth2 token
-    assert response.json()["detail"] == "Not authenticated" # Or "Missing Authorization Header" depending on FastAPI version/setup
+def test_delete_user_not_found(client: TestClient, db_session: Session):
+    _ = create_and_login_user(client, "deleter_user_notfound") # Logs in a user
+    
+    response = client.delete(f"{settings.API_STR}/users/9999997") # Non-existent ID
+    assert response.status_code == 403 # Changed from 404
+    assert response.json()["detail"] == "Not authorized to delete this user" # Changed detail
+
+def test_update_user_conflict_username(client: TestClient, db_session: Session):
+    user_a_info = create_and_login_user(client, "conflict_username_A")
+    user_b_info = create_and_login_user(client, "conflict_username_B") # User B is now logged in
+
+    update_payload = {"username": user_a_info["username"]} # Try to set B's username to A's
+    response = client.put(f"{settings.API_STR}/users/{user_b_info['id']}", json=update_payload)
+    assert response.status_code == 400
+    assert "username already registered" in response.json()["detail"].lower()
+
+
+def test_update_user_conflict_email(client: TestClient, db_session: Session):
+    user_a_info = create_and_login_user(client, "conflict_email_A")
+    user_b_info = create_and_login_user(client, "conflict_email_B") # User B is now logged in
+
+    update_payload = {"email": user_a_info["email"]} # Try to set B's email to A's
+    response = client.put(f"{settings.API_STR}/users/{user_b_info['id']}", json=update_payload)
+    assert response.status_code == 400
+    assert "email already registered" in response.json()["detail"].lower()

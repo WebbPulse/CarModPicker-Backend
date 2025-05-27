@@ -66,8 +66,8 @@ def db_session(create_test_tables): # This fixture provides the transactional se
         yield session # provide the session for the test
     finally:
         session.close()
-        # Rollback any changes made during the test using this session
-        transaction.rollback()
+        if transaction.is_active:
+            transaction.rollback()
         connection.close()
 
 

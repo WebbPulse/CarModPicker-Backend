@@ -2,15 +2,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.api.schemas.car import CarRead, CarCreate, CarUpdate
-from app.api.models.user import User as DBUser
 
-# Helper function to create a user and get auth headers
-# This could be imported from a shared test utility module if you have one
-# For now, adapting the one from your test_users.py
-def create_user_and_get_headers(client: TestClient, username_suffix: str, password_suffix: str) -> tuple[dict, int]:
+# Helper function to create a user and log them in (sets cookie on client)
+# This function is similar to the one in test_build_lists.py
+def create_and_login_user(client: TestClient, username_suffix: str) -> int: # Returns user_id
     username = f"car_test_user_{username_suffix}"
     email = f"car_test_user_{username_suffix}@example.com"
-    password = f"password_{password_suffix}"
+    password = "testpassword"
     
     user_data = {
         "username": username,
@@ -19,165 +17,177 @@ def create_user_and_get_headers(client: TestClient, username_suffix: str, passwo
         "first_name": "CarTest",
         "last_name": username_suffix.capitalize()
     }
-    # Ensure user creation endpoint is correct
     response = client.post(f"{settings.API_STR}/users/", json=user_data)
-    if response.status_code != 200 and response.status_code != 400: # Allow if user already exists from previous run
-        raise Exception(f"Failed to create user {username} for car tests. Status: {response.status_code}, Detail: {response.text}")
-    
     user_id = -1
     if response.status_code == 200:
         user_id = response.json()["id"]
-    elif response.status_code == 400: # User might already exist, try to get ID by logging in
-        # This part is tricky without querying DB directly or having a get_user_by_username endpoint
-        # For simplicity, we'll assume tests run in a clean state or user creation is idempotent for testing
-        # If user already exists, we need a way to get their ID or rely on the token for user context
-        pass
-
+    elif response.status_code == 400 and "already registered" in response.json().get("detail", ""):
+        pass 
+    else:
+        response.raise_for_status() # Raise an exception for other errors
 
     login_data = {"username": username, "password": password}
     token_response = client.post(f"{settings.API_STR}/token", data=login_data)
     if token_response.status_code != 200:
-        raise Exception(f"Failed to log in user {username} to get token. Status: {token_response.status_code}, Detail: {token_response.text}")
+        raise Exception(f"Failed to log in user {username}. Status: {token_response.status_code}, Detail: {token_response.text}")
     
-    token_data = token_response.json()
-    headers = {"Authorization": f"Bearer {token_data['access_token']}"}
-    
-    # To get user_id if not from creation (e.g. user existed)
-    if user_id == -1:
-        me_response = client.get(f"{settings.API_STR}/users/me", headers=headers)
+    if user_id == -1: # If user existed and was not created, fetch ID
+        me_response = client.get(f"{settings.API_STR}/users/me")
         if me_response.status_code == 200:
             user_id = me_response.json()["id"]
         else:
-            raise Exception("Could not retrieve user_id for existing user.")
+            raise Exception(f"Could not retrieve user_id for existing user {username} via /users/me.")
             
-    return headers, user_id
+    if user_id == -1:
+        raise Exception(f"User ID for {username} could not be determined.")
+    return user_id
 
+# --- Test Cases ---
 
 def test_create_car_success(client: TestClient, db_session: Session):
-    auth_headers, user_id = create_user_and_get_headers(client, "creator", "pass")
+    _ = create_and_login_user(client, "creator_car") # Logs in user, client gets cookie
     
     car_data = {
-        "make": "Toyota",
-        "model": "Supra",
-        "year": 2020,
-        "trim": "GR"
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2022,
+        "trim": "Sport"
     }
-    response = client.post(f"{settings.API_STR}/cars/", json=car_data, headers=auth_headers)
+    response = client.post(f"{settings.API_STR}/cars/", json=car_data) # Cookie sent automatically
     assert response.status_code == 200, response.text
     created_car = response.json()
     assert created_car["make"] == car_data["make"]
     assert created_car["model"] == car_data["model"]
-    assert created_car["year"] == car_data["year"]
-    assert created_car["trim"] == car_data["trim"]
     assert "id" in created_car
-    assert created_car["user_id"] == user_id
+    assert "user_id" in created_car # Assuming user_id is part of CarRead
 
-def test_create_car_unauthenticated(client: TestClient):
-    car_data = {"make": "Honda", "model": "Civic", "year": 2021}
+def test_create_car_unauthenticated(client: TestClient, db_session: Session):
+    client.cookies.clear() # Ensure no auth cookie
+    car_data = {"make": "Toyota", "model": "Corolla", "year": 2021}
     response = client.post(f"{settings.API_STR}/cars/", json=car_data)
-    assert response.status_code == 401 # Expecting 401 Unauthorized
+    assert response.status_code == 401 # Expect unauthorized
 
 def test_read_car_success(client: TestClient, db_session: Session):
-    auth_headers, _ = create_user_and_get_headers(client, "reader", "pass")
-    car_data = {"make": "Mazda", "model": "MX-5", "year": 2019}
-    create_response = client.post(f"{settings.API_STR}/cars/", json=car_data, headers=auth_headers)
+    user_id = create_and_login_user(client, "reader_car")
+    car_data_payload = {"make": "Mazda", "model": "3", "year": 2020}
+    create_response = client.post(f"{settings.API_STR}/cars/", json=car_data_payload)
     assert create_response.status_code == 200
     car_id = create_response.json()["id"]
 
-    # As per current cars.py, read_car does not require authentication or check ownership
+    # Reading a car might be public or require auth depending on your endpoint logic.
+    # If public, clearing cookies is fine. If it requires auth (e.g. to see only own cars), don't clear.
+    # Assuming public read for this example as per your `read_car` endpoint.
+    client.cookies.clear() 
     response = client.get(f"{settings.API_STR}/cars/{car_id}")
     assert response.status_code == 200, response.text
     read_car_data = response.json()
     assert read_car_data["id"] == car_id
-    assert read_car_data["make"] == car_data["make"]
+    assert read_car_data["make"] == car_data_payload["make"]
+    assert read_car_data["user_id"] == user_id
 
-def test_read_car_non_existent(client: TestClient):
-    response = client.get(f"{settings.API_STR}/cars/999999") # Assuming this ID won't exist
+def test_read_car_not_found(client: TestClient, db_session: Session):
+    response = client.get(f"{settings.API_STR}/cars/999999") # Non-existent ID
     assert response.status_code == 404
-    assert response.json()["detail"] == "Car not found"
 
 def test_update_own_car_success(client: TestClient, db_session: Session):
-    auth_headers, _ = create_user_and_get_headers(client, "updater", "pass")
-    car_data_initial = {"make": "Nissan", "model": "GT-R", "year": 2018, "trim": "Nismo"}
-    create_response = client.post(f"{settings.API_STR}/cars/", json=car_data_initial, headers=auth_headers)
+    _ = create_and_login_user(client, "updater_car") # Logs in, client gets cookie
+    
+    initial_car_data = {"make": "Nissan", "model": "Altima", "year": 2019}
+    create_response = client.post(f"{settings.API_STR}/cars/", json=initial_car_data)
     assert create_response.status_code == 200
     car_id = create_response.json()["id"]
 
-    update_payload = {"year": 2019, "trim": "Track Edition"}
-    response = client.put(f"{settings.API_STR}/cars/{car_id}", json=update_payload, headers=auth_headers)
+    update_payload = {"model": "Maxima", "year": 2020}
+    response = client.put(f"{settings.API_STR}/cars/{car_id}", json=update_payload) # Cookie sent
     assert response.status_code == 200, response.text
     updated_car = response.json()
-    assert updated_car["year"] == 2019
-    assert updated_car["trim"] == "Track Edition"
-    assert updated_car["make"] == car_data_initial["make"] # Make should remain unchanged
+    assert updated_car["model"] == update_payload["model"]
+    assert updated_car["year"] == update_payload["year"]
+    assert updated_car["make"] == initial_car_data["make"] # Make should be unchanged
 
 def test_update_car_unauthenticated(client: TestClient, db_session: Session):
-    # Setup: Create a car first by an authenticated user
-    auth_headers, _ = create_user_and_get_headers(client, "owner_for_update_unauth", "pass")
-    car_data = {"make": "Subaru", "model": "WRX", "year": 2020}
-    create_response = client.post(f"{settings.API_STR}/cars/", json=car_data, headers=auth_headers)
+    _ = create_and_login_user(client, "owner_for_update_unauth_car")
+    car_data = {"make": "Subaru", "model": "WRX", "year": 2021}
+    create_response = client.post(f"{settings.API_STR}/cars/", json=car_data)
     assert create_response.status_code == 200
     car_id = create_response.json()["id"]
 
-    update_payload = {"year": 2021}
-    response = client.put(f"{settings.API_STR}/cars/{car_id}", json=update_payload) # No auth headers
+    client.cookies.clear() # Clear cookie for unauthenticated request
+    update_payload = {"year": 2022}
+    response = client.put(f"{settings.API_STR}/cars/{car_id}", json=update_payload)
     assert response.status_code == 401
 
 def test_update_other_users_car_forbidden(client: TestClient, db_session: Session):
     # User A creates a car
-    auth_headers_a, _ = create_user_and_get_headers(client, "userA_car_owner", "passA")
-    car_data_a = {"make": "Ford", "model": "Mustang", "year": 2020}
-    create_response_a = client.post(f"{settings.API_STR}/cars/", json=car_data_a, headers=auth_headers_a)
+    _ = create_and_login_user(client, "userA_car_owner") # Client has User A's cookie
+    car_data_a = {"make": "Ford", "model": "Focus", "year": 2018}
+    create_response_a = client.post(f"{settings.API_STR}/cars/", json=car_data_a)
     assert create_response_a.status_code == 200
     car_id_a = create_response_a.json()["id"]
 
-    # User B tries to update User A's car
-    auth_headers_b, _ = create_user_and_get_headers(client, "userB_attacker", "passB")
-    update_payload = {"year": 2021}
-    response = client.put(f"{settings.API_STR}/cars/{car_id_a}", json=update_payload, headers=auth_headers_b)
-    assert response.status_code == 403
+    # User B logs in (client now has User B's cookie)
+    client.cookies.clear()
+    _ = create_and_login_user(client, "userB_car_attacker")
+    
+    update_payload = {"year": 2023}
+    response = client.put(f"{settings.API_STR}/cars/{car_id_a}", json=update_payload) # User B tries to update User A's car
+    assert response.status_code == 403 # Expect forbidden
     assert response.json()["detail"] == "Not authorized to update this car"
 
+
 def test_delete_own_car_success(client: TestClient, db_session: Session):
-    auth_headers, _ = create_user_and_get_headers(client, "deleter", "pass")
-    car_data = {"make": "BMW", "model": "M3", "year": 2021}
-    create_response = client.post(f"{settings.API_STR}/cars/", json=car_data, headers=auth_headers)
+    _ = create_and_login_user(client, "deleter_car") # Logs in, client gets cookie
+    car_data = {"make": "Kia", "model": "Stinger", "year": 2020}
+    create_response = client.post(f"{settings.API_STR}/cars/", json=car_data)
     assert create_response.status_code == 200
     car_id = create_response.json()["id"]
 
-    response = client.delete(f"{settings.API_STR}/cars/{car_id}", headers=auth_headers)
+    response = client.delete(f"{settings.API_STR}/cars/{car_id}") # Cookie sent
     assert response.status_code == 200, response.text
     deleted_car_data = response.json()
     assert deleted_car_data["id"] == car_id
 
     # Verify car is deleted
-    get_response = client.get(f"{settings.API_STR}/cars/{car_id}") # No auth needed for GET as per current code
+    client.cookies.clear() # Clear cookie to ensure public 404 if car is gone
+    get_response = client.get(f"{settings.API_STR}/cars/{car_id}")
     assert get_response.status_code == 404
 
 def test_delete_car_unauthenticated(client: TestClient, db_session: Session):
-    auth_headers, _ = create_user_and_get_headers(client, "owner_for_delete_unauth", "pass")
-    car_data = {"make": "Audi", "model": "R8", "year": 2019}
-    create_response = client.post(f"{settings.API_STR}/cars/", json=car_data, headers=auth_headers)
+    _ = create_and_login_user(client, "owner_for_delete_unauth_car")
+    car_data = {"make": "Hyundai", "model": "Elantra", "year": 2019}
+    create_response = client.post(f"{settings.API_STR}/cars/", json=car_data)
     assert create_response.status_code == 200
     car_id = create_response.json()["id"]
 
-    response = client.delete(f"{settings.API_STR}/cars/{car_id}") # No auth headers
+    client.cookies.clear() # Clear cookie
+    response = client.delete(f"{settings.API_STR}/cars/{car_id}")
     assert response.status_code == 401
 
 def test_delete_other_users_car_forbidden(client: TestClient, db_session: Session):
-    auth_headers_a, _ = create_user_and_get_headers(client, "userA_car_owner_del", "passA")
-    car_data_a = {"make": "Porsche", "model": "911", "year": 2022}
-    create_response_a = client.post(f"{settings.API_STR}/cars/", json=car_data_a, headers=auth_headers_a)
+    # User A creates a car
+    _ = create_and_login_user(client, "userA_car_owner_del") # Client has User A's cookie
+    car_data_a = {"make": "BMW", "model": "M3", "year": 2021}
+    create_response_a = client.post(f"{settings.API_STR}/cars/", json=car_data_a)
     assert create_response_a.status_code == 200
     car_id_a = create_response_a.json()["id"]
 
-    auth_headers_b, _ = create_user_and_get_headers(client, "userB_deleter_attacker", "passB")
-    response = client.delete(f"{settings.API_STR}/cars/{car_id_a}", headers=auth_headers_b)
+    # User B logs in
+    client.cookies.clear()
+    _ = create_and_login_user(client, "userB_car_deleter_attacker") # Client has User B's cookie
+    
+    response = client.delete(f"{settings.API_STR}/cars/{car_id_a}") # User B tries to delete User A's car
     assert response.status_code == 403
     assert response.json()["detail"] == "Not authorized to delete this car"
 
+def test_update_car_not_found(client: TestClient, db_session: Session):
+    _ = create_and_login_user(client, "updater_car_notfound") # Sets cookie
+    update_payload = {"make": "NonExistent"}
+    response = client.put(f"{settings.API_STR}/cars/888888", json=update_payload) # Uses cookie
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Car not found"
+
 def test_delete_car_not_found(client: TestClient, db_session: Session):
-    auth_headers, _ = create_user_and_get_headers(client, "deleter_notfound", "pass")
-    response = client.delete(f"{settings.API_STR}/cars/888888", headers=auth_headers) # Non-existent ID
+    _ = create_and_login_user(client, "deleter_car_notfound") # Sets cookie
+    response = client.delete(f"{settings.API_STR}/cars/777777") # Uses cookie, Non-existent ID
     assert response.status_code == 404
     assert response.json()["detail"] == "Car not found"

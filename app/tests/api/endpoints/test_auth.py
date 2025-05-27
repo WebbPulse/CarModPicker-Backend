@@ -22,71 +22,103 @@ def create_test_user_direct_db(db: Session, username: str, email: str, password:
     return db_user
 
 def test_login_for_access_token_success(client: TestClient, db_session: Session):
-    # Create a user first (either via API or directly in DB for isolated auth test)
-    username = "auth_test_user"
+    username = "auth_test_user_cookie" # Ensure unique username for test
     password = "auth_test_password"
-    email = "auth_test@example.com"
+    email = "auth_test_cookie@example.com"
     
-    # Using the API to create the user to ensure it's in a valid state
     user_data = {"username": username, "email": email, "password": password}
-    response = client.post(f"{settings.API_STR}/users/", json=user_data)
-    assert response.status_code == 200, f"Failed to create user for auth test: {response.text}"
+    # Create user via API
+    create_user_response = client.post(f"{settings.API_STR}/users/", json=user_data)
+    assert create_user_response.status_code == 200, f"Failed to create user for auth test: {create_user_response.text}"
 
     login_data = {"username": username, "password": password}
-    response = client.post(f"{settings.API_STR}/token", data=login_data) # tokenUrl is relative to base
+    response = client.post(f"{settings.API_STR}/token", data=login_data)
     assert response.status_code == 200, response.text
-    token = response.json()
-    assert "access_token" in token
-    assert token["token_type"] == "bearer"
+    
+    # 1. Check for the cookie
+    assert "access_token" in response.cookies
+    access_token_cookie_value = response.cookies.get("access_token")
+    assert access_token_cookie_value is not None
+
+    # 2. Check cookie attributes by parsing the Set-Cookie header
+    # Note: httpx.Cookies (used by TestClient) doesn't directly expose all attributes like HttpOnly easily.
+    # Parsing the header is a reliable way.
+    set_cookie_header = response.headers.get("set-cookie")
+    assert set_cookie_header is not None
+    assert "access_token=" in set_cookie_header
+    assert "HttpOnly" in set_cookie_header
+    assert "Path=/" in set_cookie_header
+    assert f"Max-Age={settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60}" in set_cookie_header
+    assert "SameSite=lax" in set_cookie_header # Or your configured samesite policy
+    # 'secure' attribute is not set in your current /token endpoint logic for non-HTTPS dev
+    assert "Secure" not in set_cookie_header 
+
+    # 3. Check the response body for user details (UserRead schema)
+    response_data = response.json()
+    assert response_data["username"] == username
+    assert response_data["email"] == email
+    assert "id" in response_data
+    assert isinstance(response_data["id"], int) # or str, depending on your UserRead schema for id
+    assert response_data["disabled"] is False
+    assert "hashed_password" not in response_data # Ensure password is not returned
+    assert "access_token" not in response_data # Ensure token is not in body
+    assert "token_type" not in response_data   # Ensure token_type is not in body
 
 def test_login_for_access_token_incorrect_username(client: TestClient):
-    login_data = {"username": "wronguser", "password": "password123"}
+    login_data = {"username": "wronguser_cookie", "password": "password123"}
     response = client.post(f"{settings.API_STR}/token", data=login_data)
     assert response.status_code == 401
     assert response.json()["detail"] == "Incorrect username or password"
+    assert "access_token" not in response.cookies # Check no cookie is set
 
 def test_login_for_access_token_incorrect_password(client: TestClient, db_session: Session):
-    username = "auth_test_user_wrong_pass"
+    username = "auth_test_user_wrong_pass_cookie" # Ensure unique username
     password = "correct_password"
-    email = "auth_test_wrong_pass@example.com"
+    email = "auth_test_wrong_pass_cookie@example.com"
     
     user_data = {"username": username, "email": email, "password": password}
-    client.post(f"{settings.API_STR}/users/", json=user_data) # Create the user
+    create_response = client.post(f"{settings.API_STR}/users/", json=user_data)
+    assert create_response.status_code == 200, f"User creation failed: {create_response.text}"
 
     login_data = {"username": username, "password": "wrong_password"}
     response = client.post(f"{settings.API_STR}/token", data=login_data)
     assert response.status_code == 401
     assert response.json()["detail"] == "Incorrect username or password"
+    assert "access_token" not in response.cookies # Check no cookie is set
 
 def test_login_for_access_token_disabled_user(client: TestClient, db_session: Session):
-    username = "disabled_user"
+    username = "disabled_user_cookie" # Ensure unique username
     password = "password123"
-    email = "disabled@example.com"
+    email = "disabled_cookie@example.com"
 
-    # Create user via API
     user_data = {"username": username, "email": email, "password": password}
     create_response = client.post(f"{settings.API_STR}/users/", json=user_data)
-    assert create_response.status_code == 200
+    assert create_response.status_code == 200, f"User creation failed: {create_response.text}"
     user_id = create_response.json()["id"]
 
-    # Log in as the user to get a token to disable them
-    # (or create another admin user to do this, for simplicity using the same user's token)
-    login_data_for_token = {"username": username, "password": password}
-    token_response = client.post(f"{settings.API_STR}/token", data=login_data_for_token)
-    assert token_response.status_code == 200
-    auth_token = token_response.json()["access_token"]
-    headers = {"Authorization": f"Bearer {auth_token}"}
+    # Log in as the user. The cookie will be set in the client for subsequent requests.
+    login_data_for_session = {"username": username, "password": password}
+    token_response = client.post(f"{settings.API_STR}/token", data=login_data_for_session)
+    assert token_response.status_code == 200, f"Login to get session cookie failed: {token_response.text}"
+    assert "access_token" in token_response.cookies # Verify cookie was set
 
-    # Disable the user via API
+    # Disable the user via API. The client will automatically send the cookie.
+    # This assumes the PUT /users/{user_id} endpoint is protected by a dependency
+    # (e.g., get_current_user) that now reads the authentication token from the cookie.
     update_payload = {"disabled": True}
-    update_response = client.put(f"{settings.API_STR}/users/{user_id}", json=update_payload, headers=headers)
+    # No explicit headers needed if the dependency reads from cookie
+    update_response = client.put(f"{settings.API_STR}/users/{user_id}", json=update_payload)
     assert update_response.status_code == 200, f"Failed to disable user: {update_response.text}"
     assert update_response.json()["disabled"] is True
     
+    # Clear cookies from the client to ensure the next login attempt is fresh
+    client.cookies.clear()
+
     # Attempt to login as the now disabled user
     login_data = {"username": username, "password": password}
     response = client.post(f"{settings.API_STR}/token", data=login_data)
-    assert response.status_code == 400, response.text # As per your auth.py logic
+    assert response.status_code == 400, response.text
     assert response.json()["detail"] == "Inactive user"
+    assert "access_token" not in response.cookies # Ensure no new cookie is set
 
 
