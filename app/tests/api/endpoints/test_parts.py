@@ -3,71 +3,99 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.api.schemas.part import PartRead, PartCreate, PartUpdate
 
+
 # Helper function to create a user and log them in (sets cookie on client)
 # This function is similar to the one in test_build_lists.py and test_cars.py
-def create_and_login_user(client: TestClient, username_suffix: str) -> int: # Returns user_id
+def create_and_login_user(
+    client: TestClient, username_suffix: str
+) -> int:  # Returns user_id
     username = f"part_test_user_{username_suffix}"
     email = f"part_test_user_{username_suffix}@example.com"
     password = "testpassword"
-    
+
     user_data = {
         "username": username,
         "email": email,
         "password": password,
-        "first_name": "PartTest",
-        "last_name": username_suffix.capitalize()
     }
     response = client.post(f"{settings.API_STR}/users/", json=user_data)
     user_id = -1
     if response.status_code == 200:
         user_id = response.json()["id"]
-    elif response.status_code == 400 and "already registered" in response.json().get("detail", ""):
-        pass 
+    elif response.status_code == 400 and "already registered" in response.json().get(
+        "detail", ""
+    ):
+        pass
     else:
         response.raise_for_status()
 
     login_data = {"username": username, "password": password}
     token_response = client.post(f"{settings.API_STR}/token", data=login_data)
     if token_response.status_code != 200:
-        raise Exception(f"Failed to log in user {username}. Status: {token_response.status_code}, Detail: {token_response.text}")
-    
-    if user_id == -1: 
+        raise Exception(
+            f"Failed to log in user {username}. Status: {token_response.status_code}, Detail: {token_response.text}"
+        )
+
+    if user_id == -1:
         me_response = client.get(f"{settings.API_STR}/users/me")
         if me_response.status_code == 200:
             user_id = me_response.json()["id"]
         else:
-            raise Exception(f"Could not retrieve user_id for existing user {username} via /users/me.")
-            
+            raise Exception(
+                f"Could not retrieve user_id for existing user {username} via /users/me."
+            )
+
     if user_id == -1:
         raise Exception(f"User ID for {username} could not be determined.")
     return user_id
 
+
 # Helper function to create a car for the currently logged-in user (via client cookie)
-def create_car_for_user_cookie_auth(client: TestClient, car_make: str = "TestMakePart", car_model: str = "TestModelPart") -> int:
-    car_data = {"make": car_make, "model": car_model, "year": 2024, "trim": "TestTrimPart"}
-    response = client.post(f"{settings.API_STR}/cars/", json=car_data) 
-    assert response.status_code == 200, f"Failed to create car for part tests: {response.text}"
+def create_car_for_user_cookie_auth(
+    client: TestClient, car_make: str = "TestMakePart", car_model: str = "TestModelPart"
+) -> int:
+    car_data = {
+        "make": car_make,
+        "model": car_model,
+        "year": 2024,
+        "trim": "TestTrimPart",
+    }
+    response = client.post(f"{settings.API_STR}/cars/", json=car_data)
+    assert (
+        response.status_code == 200
+    ), f"Failed to create car for part tests: {response.text}"
     return response.json()["id"]
+
 
 # Helper function to create a build list for a car owned by the currently logged-in user
-def create_build_list_for_car_cookie_auth(client: TestClient, car_id: int, bl_name: str = "TestBLPart") -> int:
-    build_list_data = {"name": bl_name, "description": "Test BL for parts", "car_id": car_id}
+def create_build_list_for_car_cookie_auth(
+    client: TestClient, car_id: int, bl_name: str = "TestBLPart"
+) -> int:
+    build_list_data = {
+        "name": bl_name,
+        "description": "Test BL for parts",
+        "car_id": car_id,
+    }
     response = client.post(f"{settings.API_STR}/build_lists/", json=build_list_data)
-    assert response.status_code == 200, f"Failed to create build list for part tests: {response.text}"
+    assert (
+        response.status_code == 200
+    ), f"Failed to create build list for part tests: {response.text}"
     return response.json()["id"]
 
+
 # --- Test Cases ---
+
 
 def test_create_part_success(client: TestClient, db_session: Session):
     _ = create_and_login_user(client, "creator_part")
     car_id = create_car_for_user_cookie_auth(client)
     build_list_id = create_build_list_for_car_cookie_auth(client, car_id)
-    
+
     part_data = {
         "name": "Performance Exhaust",
         "part_type": "Exhaust",
         "manufacturer": "BrandX",
-        "build_list_id": build_list_id
+        "build_list_id": build_list_id,
     }
     response = client.post(f"{settings.API_STR}/parts/", json=part_data)
     assert response.status_code == 200, response.text
@@ -75,6 +103,7 @@ def test_create_part_success(client: TestClient, db_session: Session):
     assert created_part["name"] == part_data["name"]
     assert created_part["build_list_id"] == build_list_id
     assert "id" in created_part
+
 
 def test_create_part_unauthenticated(client: TestClient, db_session: Session):
     _ = create_and_login_user(client, "temp_owner_part_unauth")
@@ -86,28 +115,40 @@ def test_create_part_unauthenticated(client: TestClient, db_session: Session):
     response = client.post(f"{settings.API_STR}/parts/", json=part_data)
     assert response.status_code == 401
 
+
 def test_create_part_build_list_not_found(client: TestClient, db_session: Session):
     _ = create_and_login_user(client, "part_bl_not_found")
     non_existent_bl_id = 999888
-    part_data = {"name": "Part for Non-existent BL", "build_list_id": non_existent_bl_id}
+    part_data = {
+        "name": "Part for Non-existent BL",
+        "build_list_id": non_existent_bl_id,
+    }
     response = client.post(f"{settings.API_STR}/parts/", json=part_data)
     assert response.status_code == 404
     assert response.json()["detail"] == "Build List not found"
 
-def test_create_part_for_other_users_build_list_forbidden(client: TestClient, db_session: Session):
+
+def test_create_part_for_other_users_build_list_forbidden(
+    client: TestClient, db_session: Session
+):
     # User A creates a car and build list
     _ = create_and_login_user(client, "userA_part_bl_owner")
     car_id_a = create_car_for_user_cookie_auth(client, "Honda", "S2000")
-    build_list_id_a = create_build_list_for_car_cookie_auth(client, car_id_a, "UserA_S2000_BL")
+    build_list_id_a = create_build_list_for_car_cookie_auth(
+        client, car_id_a, "UserA_S2000_BL"
+    )
 
     # User B logs in
     client.cookies.clear()
     _ = create_and_login_user(client, "userB_part_attacker")
-    
+
     part_data = {"name": "Attacker's Part", "build_list_id": build_list_id_a}
     response = client.post(f"{settings.API_STR}/parts/", json=part_data)
     assert response.status_code == 403
-    assert response.json()["detail"] == "Not authorized to add a part to this build list"
+    assert (
+        response.json()["detail"] == "Not authorized to add a part to this build list"
+    )
+
 
 def test_read_part_success(client: TestClient, db_session: Session):
     _ = create_and_login_user(client, "reader_part")
@@ -118,17 +159,19 @@ def test_read_part_success(client: TestClient, db_session: Session):
     assert create_response.status_code == 200
     part_id = create_response.json()["id"]
 
-    client.cookies.clear() # Assuming public read for parts
+    client.cookies.clear()  # Assuming public read for parts
     response = client.get(f"{settings.API_STR}/parts/{part_id}")
     assert response.status_code == 200, response.text
     read_part_data = response.json()
     assert read_part_data["id"] == part_id
     assert read_part_data["name"] == part_data_payload["name"]
 
+
 def test_read_part_not_found(client: TestClient, db_session: Session):
     response = client.get(f"{settings.API_STR}/parts/777666")
     assert response.status_code == 404
-    assert response.json()["detail"] == "part not found" # As per parts.py endpoint
+    assert response.json()["detail"] == "part not found"  # As per parts.py endpoint
+
 
 def test_update_own_part_success(client: TestClient, db_session: Session):
     _ = create_and_login_user(client, "updater_part")
@@ -139,7 +182,10 @@ def test_update_own_part_success(client: TestClient, db_session: Session):
     assert create_response.status_code == 200
     part_id = create_response.json()["id"]
 
-    update_payload = {"name": "Carbon Fiber Spoiler", "description": "Lightweight and stylish"}
+    update_payload = {
+        "name": "Carbon Fiber Spoiler",
+        "description": "Lightweight and stylish",
+    }
     response = client.put(f"{settings.API_STR}/parts/{part_id}", json=update_payload)
     assert response.status_code == 200, response.text
     updated_part = response.json()
@@ -147,11 +193,18 @@ def test_update_own_part_success(client: TestClient, db_session: Session):
     assert updated_part["description"] == update_payload["description"]
     assert updated_part["build_list_id"] == build_list_id
 
-def test_update_own_part_change_build_list_success(client: TestClient, db_session: Session):
+
+def test_update_own_part_change_build_list_success(
+    client: TestClient, db_session: Session
+):
     user_id = create_and_login_user(client, "part_bl_changer")
     car_id = create_car_for_user_cookie_auth(client)
-    build_list_id_1 = create_build_list_for_car_cookie_auth(client, car_id, "BL_1_for_Part_Move")
-    build_list_id_2 = create_build_list_for_car_cookie_auth(client, car_id, "BL_2_for_Part_Move") # User owns both BLs
+    build_list_id_1 = create_build_list_for_car_cookie_auth(
+        client, car_id, "BL_1_for_Part_Move"
+    )
+    build_list_id_2 = create_build_list_for_car_cookie_auth(
+        client, car_id, "BL_2_for_Part_Move"
+    )  # User owns both BLs
 
     part_data_initial = {"name": "Movable Part", "build_list_id": build_list_id_1}
     create_response = client.post(f"{settings.API_STR}/parts/", json=part_data_initial)
@@ -163,6 +216,7 @@ def test_update_own_part_change_build_list_success(client: TestClient, db_sessio
     assert response.status_code == 200, response.text
     updated_part = response.json()
     assert updated_part["build_list_id"] == build_list_id_2
+
 
 def test_update_part_unauthenticated(client: TestClient, db_session: Session):
     _ = create_and_login_user(client, "owner_for_update_unauth_part")
@@ -178,12 +232,14 @@ def test_update_part_unauthenticated(client: TestClient, db_session: Session):
     response = client.put(f"{settings.API_STR}/parts/{part_id}", json=update_payload)
     assert response.status_code == 401
 
+
 def test_update_part_not_found(client: TestClient, db_session: Session):
     _ = create_and_login_user(client, "updater_part_notfound")
     update_payload = {"name": "Update Non Existent Part"}
     response = client.put(f"{settings.API_STR}/parts/555444", json=update_payload)
-    assert response.status_code == 404 
+    assert response.status_code == 404
     assert response.json()["detail"] == "part not found"
+
 
 def test_update_other_users_part_forbidden(client: TestClient, db_session: Session):
     # User A creates car, build list, and part
@@ -198,17 +254,22 @@ def test_update_other_users_part_forbidden(client: TestClient, db_session: Sessi
     # User B logs in
     client.cookies.clear()
     _ = create_and_login_user(client, "userB_part_updater_attacker")
-    
+
     update_payload = {"name": "Malicious Part Update"}
     response = client.put(f"{settings.API_STR}/parts/{part_id_a}", json=update_payload)
     assert response.status_code == 403
     assert response.json()["detail"] == "Not authorized to update this part"
 
-def test_update_part_to_other_users_build_list_forbidden(client: TestClient, db_session: Session):
+
+def test_update_part_to_other_users_build_list_forbidden(
+    client: TestClient, db_session: Session
+):
     # User A creates their car, build list, and part
     _ = create_and_login_user(client, "userA_part_bl_switcher")
     car_id_a = create_car_for_user_cookie_auth(client, "Nissan", "Silvia")
-    build_list_id_a_own = create_build_list_for_car_cookie_auth(client, car_id_a, "UserA_Silvia_BL")
+    build_list_id_a_own = create_build_list_for_car_cookie_auth(
+        client, car_id_a, "UserA_Silvia_BL"
+    )
     part_data_a = {"name": "User A's Drift Part", "build_list_id": build_list_id_a_own}
     create_response_a = client.post(f"{settings.API_STR}/parts/", json=part_data_a)
     assert create_response_a.status_code == 200
@@ -218,18 +279,27 @@ def test_update_part_to_other_users_build_list_forbidden(client: TestClient, db_
     client.cookies.clear()
     _ = create_and_login_user(client, "userB_bl_owner_target_part")
     car_id_b = create_car_for_user_cookie_auth(client, "Toyota", "AE86")
-    build_list_id_b_target = create_build_list_for_car_cookie_auth(client, car_id_b, "UserB_AE86_BL")
+    build_list_id_b_target = create_build_list_for_car_cookie_auth(
+        client, car_id_b, "UserB_AE86_BL"
+    )
 
     # User A logs back in to attempt the update
     client.cookies.clear()
     _ = create_and_login_user(client, "userA_part_bl_switcher")
 
-    update_payload = {"build_list_id": build_list_id_b_target} # Attempt to move part to User B's BL
+    update_payload = {
+        "build_list_id": build_list_id_b_target
+    }  # Attempt to move part to User B's BL
     response = client.put(f"{settings.API_STR}/parts/{part_id_a}", json=update_payload)
     assert response.status_code == 403
-    assert response.json()["detail"] == "Not authorized to move part to the new build list"
+    assert (
+        response.json()["detail"] == "Not authorized to move part to the new build list"
+    )
 
-def test_update_part_to_non_existent_build_list_not_found(client: TestClient, db_session: Session):
+
+def test_update_part_to_non_existent_build_list_not_found(
+    client: TestClient, db_session: Session
+):
     _ = create_and_login_user(client, "part_to_non_bl_updater")
     car_id = create_car_for_user_cookie_auth(client)
     build_list_id_own = create_build_list_for_car_cookie_auth(client, car_id)
@@ -242,7 +312,11 @@ def test_update_part_to_non_existent_build_list_not_found(client: TestClient, db
     update_payload = {"build_list_id": non_existent_bl_id}
     response = client.put(f"{settings.API_STR}/parts/{part_id}", json=update_payload)
     assert response.status_code == 404
-    assert response.json()["detail"] == f"New Build List with id {non_existent_bl_id} not found"
+    assert (
+        response.json()["detail"]
+        == f"New Build List with id {non_existent_bl_id} not found"
+    )
+
 
 def test_delete_own_part_success(client: TestClient, db_session: Session):
     _ = create_and_login_user(client, "deleter_part")
@@ -258,9 +332,10 @@ def test_delete_own_part_success(client: TestClient, db_session: Session):
     deleted_part_data = response.json()
     assert deleted_part_data["id"] == part_id
 
-    client.cookies.clear() # To verify it's gone
+    client.cookies.clear()  # To verify it's gone
     get_response = client.get(f"{settings.API_STR}/parts/{part_id}")
     assert get_response.status_code == 404
+
 
 def test_delete_part_unauthenticated(client: TestClient, db_session: Session):
     _ = create_and_login_user(client, "owner_for_delete_unauth_part")
@@ -275,11 +350,13 @@ def test_delete_part_unauthenticated(client: TestClient, db_session: Session):
     response = client.delete(f"{settings.API_STR}/parts/{part_id}")
     assert response.status_code == 401
 
+
 def test_delete_part_not_found(client: TestClient, db_session: Session):
     _ = create_and_login_user(client, "deleter_part_notfound")
     response = client.delete(f"{settings.API_STR}/parts/333222")
     assert response.status_code == 404
     assert response.json()["detail"] == "part not found"
+
 
 def test_delete_other_users_part_forbidden(client: TestClient, db_session: Session):
     # User A creates car, build list, and part
@@ -294,7 +371,7 @@ def test_delete_other_users_part_forbidden(client: TestClient, db_session: Sessi
     # User B logs in
     client.cookies.clear()
     _ = create_and_login_user(client, "userB_part_deleter_attacker")
-    
+
     response = client.delete(f"{settings.API_STR}/parts/{part_id_a}")
     assert response.status_code == 403
     assert response.json()["detail"] == "Not authorized to delete this part"
