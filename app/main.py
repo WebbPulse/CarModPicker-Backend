@@ -5,24 +5,27 @@ from .api.endpoints import users
 from .api.endpoints import cars
 from .api.endpoints import parts
 from .api.endpoints import build_lists
+
 # Create database tables (For PoC, use Alembic for production)
 # Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_STR}/openapi.json",
-    debug=settings.DEBUG
+    debug=settings.DEBUG,
 )
 
-app.include_router(users.router, prefix=settings.API_STR+"/users", tags=["users"])
-app.include_router(cars.router, prefix=settings.API_STR+"/cars", tags=["cars"])
-app.include_router(build_lists.router, prefix=settings.API_STR+"/build_lists", tags=["build_lists"])
-app.include_router(parts.router, prefix=settings.API_STR+"/parts", tags=["parts"])
-app.include_router(auth.router,prefix=settings.API_STR, tags=["auth"]) # Add auth router (prefix depends on tokenUrl)
+app.include_router(users.router, prefix=settings.API_STR + "/users", tags=["users"])
+app.include_router(cars.router, prefix=settings.API_STR + "/cars", tags=["cars"])
+app.include_router(
+    build_lists.router, prefix=settings.API_STR + "/build_lists", tags=["build_lists"]
+)
+app.include_router(parts.router, prefix=settings.API_STR + "/parts", tags=["parts"])
+app.include_router(
+    auth.router, prefix=settings.API_STR + "/auth", tags=["auth"]
+)  # Add auth router (prefix depends on tokenUrl)
+
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
-    
-
-

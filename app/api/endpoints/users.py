@@ -61,7 +61,6 @@ async def create_user(
         username=user.username,
         email=user.email,
         hashed_password=hashed_password,
-        # disabled defaults to False in the model
     )
 
     db.add(db_user)

@@ -23,5 +23,6 @@ class UserRead(BaseModel):
     username: str
     email: EmailStr
     disabled: bool
+    email_verified: bool  # Add this line
 
     model_config = ConfigDict(from_attributes=True)
