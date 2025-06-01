@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status, Cookie # Import Cookie
+from fastapi import Depends, HTTPException, status, Cookie  # Import Cookie
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 import bcrypt
@@ -13,28 +13,32 @@ from ...api.models.user import User as DBUser
 from ...api.schemas.token import TokenData
 
 # OAuth2 Scheme - can remain for documentation or if you support header auth elsewhere
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token") # Corrected tokenUrl to be absolute path
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/token"
+)  # Corrected tokenUrl to be absolute path
 
 # --- Password Utilities ---
+
 
 def verify_password(plain_password: str, hashed_password_str: str) -> bool:
     """Verifies a plain password against a hashed password."""
     # Ensure hashed_password_str is bytes, as bcrypt expects
-    hashed_password_bytes = hashed_password_str.encode('utf-8')
-    plain_password_bytes = plain_password.encode('utf-8')
+    hashed_password_bytes = hashed_password_str.encode("utf-8")
+    plain_password_bytes = plain_password.encode("utf-8")
     return bcrypt.checkpw(plain_password_bytes, hashed_password_bytes)
+
 
 def get_password_hash(password: str) -> str:
     """Hashes a plain password."""
-    password_bytes = password.encode('utf-8')
+    password_bytes = password.encode("utf-8")
     salt = bcrypt.gensalt(rounds=12)
     hashed_bytes = bcrypt.hashpw(password_bytes, salt)
     # Store as string
-    return hashed_bytes.decode('utf-8')
+    return hashed_bytes.decode("utf-8")
+
 
 # --- JWT Utilities ---
 
-ALGORITHM = "HS256"
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Creates a JWT access token."""
@@ -43,17 +47,22 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         # Use default expiration from settings
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(
+        to_encode, settings.SECRET_KEY, algorithm=settings.HASH_ALGORITHM
+    )
     return encoded_jwt
 
 
 # --- Dependency to Get Current User ---
 
+
 async def get_current_user(
-    access_token: Optional[str] = Cookie(None), # Read "access_token" cookie
-    db: Session = Depends(get_db)
+    access_token: Optional[str] = Cookie(None),  # Read "access_token" cookie
+    db: Session = Depends(get_db),
 ) -> DBUser:
     """
     Decodes JWT token from cookie, validates credentials, and returns the user.
@@ -65,9 +74,11 @@ async def get_current_user(
     )
     if access_token is None:
         raise credentials_exception
-    
+
     try:
-        payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            access_token, settings.SECRET_KEY, algorithms=[settings.HASH_ALGORITHM]
+        )
         username: Optional[str] = payload.get("sub")
         if username is None:
             raise credentials_exception
@@ -79,13 +90,15 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     if user.disabled:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
+        )
     return user
 
 
 async def get_current_active_user_optional(
-    access_token: Optional[str] = Cookie(None), # Read "access_token" cookie
-    db: Session = Depends(get_db)
+    access_token: Optional[str] = Cookie(None),  # Read "access_token" cookie
+    db: Session = Depends(get_db),
 ) -> Optional[DBUser]:
     """
     Optionally returns the current active user if a valid token cookie is present.
@@ -94,20 +107,21 @@ async def get_current_active_user_optional(
     if access_token is None:
         return None
     try:
-        payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            access_token, settings.SECRET_KEY, algorithms=[settings.HASH_ALGORITHM]
+        )
         username: Optional[str] = payload.get("sub")
         if username is None:
-            return None # Invalid token payload
+            return None  # Invalid token payload
         token_data = TokenData(username=username)
-    except JWTError: # Covers expired, invalid signature, etc.
-        return None # Token is invalid or expired
+    except JWTError:  # Covers expired, invalid signature, etc.
+        return None  # Token is invalid or expired
 
     user = db.query(DBUser).filter(DBUser.username == token_data.username).first()
     if user is None:
-        return None # User from token not found in DB
-    
+        return None  # User from token not found in DB
+
     if user.disabled:
-        return None # User is inactive, so not considered an "active user"
+        return None  # User is inactive, so not considered an "active user"
 
     return user
-

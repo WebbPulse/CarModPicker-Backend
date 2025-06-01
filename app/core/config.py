@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     EMAIL_FROM: str
     SENDGRID_VERIFY_EMAIL_TEMPLATE_ID: str
     SENDGRID_RESET_PASSWORD_TEMPLATE_ID: str
+    # Hashing settings
+    HASH_ALGORITHM: str = "HS256"
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"

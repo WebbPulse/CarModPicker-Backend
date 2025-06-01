@@ -82,47 +82,53 @@ async def verify_email(
 
 @router.get("/verify-email/confirm")
 async def verify_email_confirm(
-    response: Response,
     token: str = Query(...),
     db: Session = Depends(get_db),
 ):
+    frontend_base_url = "http://localhost:4000/verify-email/confirm"
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.HASH_ALGORITHM]
+        )
         email = payload.get("sub")
         purpose = payload.get("purpose")
-        if purpose != "verify_email":
-            raise HTTPException(status_code=400, detail="Invalid verification token")
+        if not email or purpose != "verify_email":
+            # Invalid token purpose or missing email
+            redirect_url = (
+                f"{frontend_base_url}?status=error&message=Invalid+verification+token"
+            )
+            return RedirectResponse(url=redirect_url)
     except JWTError:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
+        # Invalid or expired token
+        redirect_url = (
+            f"{frontend_base_url}?status=error&message=Invalid+or+expired+token"
+        )
+        return RedirectResponse(url=redirect_url)
+
     user = db.query(DBUser).filter(DBUser.email == email).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        # User not found
+        redirect_url = f"{frontend_base_url}?status=error&message=User+not+found"
+        return RedirectResponse(url=redirect_url)
 
-    if not user.email_verified:  # Check if not already verified to avoid re-processing
-        user.email_verified = True
-        db.commit()
-        db.refresh(user)  # Refresh to get updated user data if needed
+    if user.email_verified:
+        # Email already verified
+        redirect_url = f"{frontend_base_url}?status=info&message=Email+already+verified"
+        return RedirectResponse(url=redirect_url)
 
-    # Log the user in by creating an access token and setting it in a cookie
-    access_token_data = {
-        "sub": user.username
-    }  # Use username for consistency with login
-    access_token = create_access_token(data=access_token_data)
+    # Proceed with email verification
+    user.email_verified = True
+    db.commit()
+    db.refresh(user)
 
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/",
-        samesite="lax",
-        secure=False,  # TODO: Set to True in production if using HTTPS
+    # Successful verification
+    redirect_url = (
+        f"{frontend_base_url}?status=success&message=Email+verified+successfully"
     )
-    frontend_login_redirect_url = "http://localhost:4000/"  # Example URL
-    return RedirectResponse(url=frontend_login_redirect_url)
+    return RedirectResponse(url=redirect_url)
 
 
-@router.post("/reset-password")
+@router.post("/forgot-password")
 async def reset_password(
     email: str = Body(..., embed=True),
     db: Session = Depends(get_db),
@@ -135,7 +141,9 @@ async def reset_password(
         expires_delta=timedelta(hours=1),
     )
 
-    new_password_frontend_url = f"http://localhost:4000/new-password?token={token}"
+    new_password_frontend_url = (
+        f"http://localhost:4000/forgot-password/confirm?token={token}"
+    )
     send_email(
         user.email,
         settings.SENDGRID_RESET_PASSWORD_TEMPLATE_ID,
@@ -144,7 +152,7 @@ async def reset_password(
     return {"message": "Password reset email sent"}
 
 
-@router.post("/reset-password/confirm")
+@router.post("/forgot-password/confirm")
 async def reset_password_confirm(
     token: str = Query(...),
     new_password_data: NewPassword = Body(...),
@@ -152,7 +160,7 @@ async def reset_password_confirm(
 ):
     try:
         payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+            token, settings.SECRET_KEY, algorithms=[settings.HASH_ALGORITHM]
         )
         email: str = payload.get("sub")
         purpose: str = payload.get("purpose")
