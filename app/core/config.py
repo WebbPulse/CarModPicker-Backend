@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     # API settings
     API_STR: str = "/api"
     PROJECT_NAME: str = "CarModPicker"
-    DEBUG: bool = False
+    DEBUG: bool = True
 
     # Database settings
     DATABASE_URL: str = (

@@ -85,7 +85,10 @@ async def verify_email_confirm(
     token: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    frontend_base_url = "http://localhost:4000/verify-email/confirm"
+    if settings.DEBUG:
+        frontend_base_url = "http://localhost:4000/verify-email/confirm"
+    else:
+        frontend_base_url = "http://carmodpicker.webbpulse.com/verify-email/confirm"  # Replace with your production frontend URL
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.HASH_ALGORITHM]
@@ -141,9 +144,12 @@ async def reset_password(
         expires_delta=timedelta(hours=1),
     )
 
-    new_password_frontend_url = (
-        f"http://localhost:4000/forgot-password/confirm?token={token}"
-    )
+    if settings.DEBUG:
+        frontend_reset_url_base = "http://localhost:4000/forgot-password/confirm"
+    else:
+        frontend_reset_url_base = "https://carmodpicker.webbpulse.com/forgot-password/confirm"  # Replace with your production frontend URL
+
+    new_password_frontend_url = f"{frontend_reset_url_base}?token={token}"
     send_email(
         user.email,
         settings.SENDGRID_RESET_PASSWORD_TEMPLATE_ID,
