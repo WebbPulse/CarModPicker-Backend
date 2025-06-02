@@ -1,5 +1,6 @@
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, From, To
+from ..core.logging import logger
 
 from app.core.config import settings
 
@@ -27,5 +28,5 @@ def send_email(to_email: str, template_id: str, dynamic_template_data: dict):
         return response.status_code
     except Exception as e:
         # Log or handle error as needed
-        print(f"SendGrid error: {e}")
+        logger.error(f"Failed to send email: {e}")
         return None
