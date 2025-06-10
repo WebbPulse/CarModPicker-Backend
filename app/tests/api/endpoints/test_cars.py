@@ -30,7 +30,9 @@ def create_and_login_user(
         response.raise_for_status()  # Raise an exception for other errors
 
     login_data = {"username": username, "password": password}
-    token_response = client.post(f"{settings.API_STR}/token", data=login_data)
+    token_response = client.post(
+        f"{settings.API_STR}/auth/token", data=login_data
+    )  # Changed
     if token_response.status_code != 200:
         raise Exception(
             f"Failed to log in user {username}. Status: {token_response.status_code}, Detail: {token_response.text}"

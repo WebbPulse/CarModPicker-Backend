@@ -15,6 +15,7 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     disabled: Optional[bool] = None
     password: Optional[str] = None
+    current_password: str
 
 
 # Schema for response body when reading a user (DO NOT include password)

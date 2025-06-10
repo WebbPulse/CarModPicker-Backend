@@ -12,10 +12,12 @@ from ...db.session import get_db
 from ...api.models.user import User as DBUser
 from ...api.schemas.token import TokenData
 
+ALGORITHM = settings.HASH_ALGORITHM  # Add this line
+
 # OAuth2 Scheme - can remain for documentation or if you support header auth elsewhere
 oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/token"
-)  # Corrected tokenUrl to be absolute path
+    tokenUrl=f"{settings.API_STR}/auth/token"  # Or "auth/token" if API_STR is a base for all paths
+)
 
 # --- Password Utilities ---
 

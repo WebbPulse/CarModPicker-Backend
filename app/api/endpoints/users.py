@@ -1,13 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError  # Import IntegrityError
 import logging
 
 from ...core.logging import get_logger
+from ...core.config import settings
 from ...db.session import get_db
 from ...api.models.user import User as DBUser
-from ...api.schemas.user import UserCreate, UserRead, UserUpdate
-from ...api.dependencies.auth import get_password_hash, get_current_user
+from ...api.schemas.user import (
+    UserCreate,
+    UserRead,
+    UserUpdate,
+)  # Ensure UserUpdate in app/api/schemas/user.py includes 'current_password: str'
+from ...api.dependencies.auth import (
+    get_password_hash,
+    get_current_user,
+    verify_password,
+    create_access_token,
+)
 
 router = APIRouter()
 
@@ -103,62 +113,113 @@ async def read_user(
         403: {"description": "Not authorized to update this user"},
         400: {
             "description": "Invalid input, e.g., username or email already registered"
-        },  # Added 400
+        },
     },
 )
 async def update_user(
     user_id: int,
-    user: UserUpdate,
+    user: UserUpdate,  # Assume UserUpdate requires current_password if sensitive fields are changed
+    response: Response,  # Inject the FastAPI Response object
     db: Session = Depends(get_db),
     logger: logging.Logger = Depends(get_logger),
     current_user: DBUser = Depends(get_current_user),
 ):
-
-    # Authorization check
-    if current_user.id != user_id:
-        logger.warning(
-            f"User {current_user.id} attempt to update user {user_id} forbidden."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this user",
-        )
-
     db_user = db.query(DBUser).filter(DBUser.id == user_id).first()
-    if db_user is None:
+
+    if not db_user:
         logger.warning(f"Attempt to update non-existent user {user_id}.")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
 
-    update_data = user.model_dump(exclude_unset=True)
+    # Check if the current user is the user being updated
+    if (
+        db_user.id != current_user.id
+    ):  # Add and not current_user.is_superuser if you have admin logic
+        logger.warning(
+            f"User {current_user.id} attempt to update user {user_id} without authorization."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this user",
+        )
+
+    # current_password should be part of UserUpdate schema and validated by Pydantic if required
+    # If current_password is in the payload, it MUST be correct.
+    if user.current_password and not verify_password(
+        user.current_password, db_user.hashed_password
+    ):
+        logger.warning(
+            f"User {current_user.id} provided incorrect current password for update."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect current password",
+        )
+
+    update_data = user.model_dump(
+        exclude_unset=True, exclude={"current_password"}
+    )  # Exclude current_password from data to be saved
+    username_changed = False
+
+    if (
+        "username" in update_data
+        and update_data["username"] is not None
+        and update_data["username"] != db_user.username
+    ):
+        username_changed = True
+        # Note: IntegrityError handling below will catch duplicate usernames if the DB enforces it.
+        # For a more proactive check, you could query here, but it might be redundant.
 
     if "password" in update_data and update_data["password"]:
         hashed_password = get_password_hash(update_data["password"])
         db_user.hashed_password = hashed_password
-        # Remove password from update_data to prevent trying to set it directly if not a model field or if handled
+        # Remove password from update_data to prevent trying to set it directly if not a model field
         del update_data["password"]
 
     for field, value in update_data.items():
-        setattr(db_user, field, value)
+        if value is not None:  # Ensure we only set fields that are explicitly provided
+            setattr(db_user, field, value)
 
     try:
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
         logger.info(f"User {user_id} updated successfully by user {current_user.id}.")
+
+        if username_changed:
+            logger.info(
+                f"Username for user {user_id} changed to '{db_user.username}'. Issuing new access token."
+            )
+            # Create a new access token with the new username
+            new_access_token_data = {"sub": db_user.username}
+            new_access_token = create_access_token(data=new_access_token_data)
+
+            # Set the new token in an HTTP-only cookie
+            response.set_cookie(
+                key="access_token",
+                value=new_access_token,
+                httponly=True,
+                max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+                path="/",
+                samesite="lax",  # Or your configured SameSite policy
+                secure=False,  # TODO: Change to True in production if served over HTTPS (e.g., settings.SECURE_COOKIES)
+            )
+
     except IntegrityError as e:
-        db.rollback()  # Add this line to explicitly rollback the session
+        db.rollback()
         logger.warning(
             f"IntegrityError during user update for user {user_id}: {e.orig}"
         )
-        # Attempt to determine if it's a username or email conflict
-        # This parsing can be DB-specific. A more robust way is to pre-check.
         error_detail_str = str(e.orig).lower()
         if (
             "users_username_key" in error_detail_str
             or "ix_users_username" in error_detail_str
+            or (
+                "unique constraint" in error_detail_str
+                and "users.username" in error_detail_str
+            )  # More generic check
         ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -167,13 +228,16 @@ async def update_user(
         elif (
             "users_email_key" in error_detail_str
             or "ix_users_email" in error_detail_str
+            or (
+                "unique constraint" in error_detail_str
+                and "users.email" in error_detail_str
+            )  # More generic check
         ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered",
             )
         else:
-            # Generic integrity error or other constraint violation
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A user with the provided username or email may already exist, or another integrity constraint was violated.",

@@ -38,7 +38,7 @@ def create_and_login_user(
 
     # Log in to set cookie on the client
     login_data = {"username": username, "password": password}
-    token_response = client.post(f"{settings.API_STR}/token", data=login_data)
+    token_response = client.post(f"{settings.API_STR}/auth/token", data=login_data)
     if token_response.status_code != 200:
         raise Exception(
             f"Failed to log in user {username} to set cookie. Status: {token_response.status_code}, Detail: {token_response.text}"
