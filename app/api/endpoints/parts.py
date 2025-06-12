@@ -132,7 +132,7 @@ async def read_parts_by_build_list(
     """
     parts = db.query(DBPart).filter(DBPart.build_list_id == build_list_id).all()
     if not parts:
-        logger.warning(f"No parts found for Build List ID {build_list_id}")
+        logger.info(f"No parts found for Build List ID {build_list_id}")
     else:
         logger.info(f"Retrieved {len(parts)} parts for Build List ID {build_list_id}")
     return parts
