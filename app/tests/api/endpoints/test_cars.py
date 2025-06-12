@@ -223,3 +223,72 @@ def test_delete_car_not_found(client: TestClient, db_session: Session):
     )  # Uses cookie, Non-existent ID
     assert response.status_code == 404
     assert response.json()["detail"] == "Car not found"
+
+
+# --- Tests for read_cars_by_user ---
+
+def test_read_cars_by_user_success(client: TestClient, db_session: Session):
+    # Create a user and log them in to create cars
+    user_id = create_and_login_user(client, "car_owner_for_list")
+
+    # Create a couple of cars for this user
+    car_data1 = {"make": "Toyota", "model": "Supra", "year": 1998}
+    car_data2 = {"make": "Nissan", "model": "Skyline R34", "year": 1999, "trim": "GT-R"}
+
+    response1 = client.post(f"{settings.API_STR}/cars/", json=car_data1) # Uses cookie
+    assert response1.status_code == 200
+    car_id1 = response1.json()["id"]
+
+    response2 = client.post(f"{settings.API_STR}/cars/", json=car_data2) # Uses cookie
+    assert response2.status_code == 200
+    car_id2 = response2.json()["id"]
+
+    # Clear cookies as the endpoint is public
+    client.cookies.clear()
+    response = client.get(f"{settings.API_STR}/cars/user/{user_id}")
+    assert response.status_code == 200, response.text
+
+    cars_list = response.json()
+    assert isinstance(cars_list, list)
+    assert len(cars_list) == 2
+
+    retrieved_car_ids = {car["id"] for car in cars_list}
+    assert car_id1 in retrieved_car_ids
+    assert car_id2 in retrieved_car_ids
+
+    for car in cars_list:
+        assert car["user_id"] == user_id
+        if car["id"] == car_id1:
+            assert car["make"] == car_data1["make"]
+            assert car["model"] == car_data1["model"]
+        elif car["id"] == car_id2:
+            assert car["make"] == car_data2["make"]
+            assert car["model"] == car_data2["model"]
+            assert car["trim"] == car_data2["trim"]
+
+
+def test_read_cars_by_user_no_cars(client: TestClient, db_session: Session):
+    # Create a user but no cars for them
+    user_id = create_and_login_user(client, "car_owner_no_cars")
+
+    # Clear cookies as the endpoint is public
+    client.cookies.clear()
+    response = client.get(f"{settings.API_STR}/cars/user/{user_id}")
+    assert response.status_code == 200, response.text
+
+    cars_list = response.json()
+    assert isinstance(cars_list, list)
+    assert len(cars_list) == 0
+
+
+def test_read_cars_by_user_non_existent_user(client: TestClient, db_session: Session):
+    non_existent_user_id = 9999999
+
+    # Clear cookies as the endpoint is public
+    client.cookies.clear()
+    response = client.get(f"{settings.API_STR}/cars/user/{non_existent_user_id}")
+    assert response.status_code == 200, response.text # Endpoint returns 200 and empty list
+
+    cars_list = response.json()
+    assert isinstance(cars_list, list)
+    assert len(cars_list) == 0

@@ -436,3 +436,68 @@ def test_delete_other_users_build_list_forbidden(
     )  # Uses User B's cookie
     assert response.status_code == 403
     assert response.json()["detail"] == "Not authorized to delete this build list"
+
+
+# Tests for read_build_lists_by_car
+def test_read_build_lists_by_car_success(client: TestClient, db_session: Session):
+    user_id = create_and_login_user(client, "owner_for_bl_by_car")
+    car_id = create_car_for_user_cookie_auth(client, "Mazda", "RX-7")
+
+    # Create a couple of build lists for this car
+    bl_data1 = {"name": "RX-7 Street Build", "car_id": car_id}
+    bl_data2 = {"name": "RX-7 Track Build", "description": "For race days", "car_id": car_id}
+    
+    response1 = client.post(f"{settings.API_STR}/build_lists/", json=bl_data1)
+    assert response1.status_code == 200
+    bl_id1 = response1.json()["id"]
+
+    response2 = client.post(f"{settings.API_STR}/build_lists/", json=bl_data2)
+    assert response2.status_code == 200
+    bl_id2 = response2.json()["id"]
+
+    client.cookies.clear() # Endpoint is public
+    response = client.get(f"{settings.API_STR}/build_lists/car/{car_id}")
+    assert response.status_code == 200, response.text
+    
+    build_lists = response.json()
+    assert isinstance(build_lists, list)
+    assert len(build_lists) == 2
+    
+    retrieved_bl_ids = {bl["id"] for bl in build_lists}
+    assert bl_id1 in retrieved_bl_ids
+    assert bl_id2 in retrieved_bl_ids
+
+    for bl in build_lists:
+        assert bl["car_id"] == car_id
+        if bl["id"] == bl_id1:
+            assert bl["name"] == bl_data1["name"]
+        elif bl["id"] == bl_id2:
+            assert bl["name"] == bl_data2["name"]
+            assert bl["description"] == bl_data2["description"]
+
+
+def test_read_build_lists_by_car_empty(client: TestClient, db_session: Session):
+    user_id = create_and_login_user(client, "owner_for_bl_by_car_empty")
+    car_id = create_car_for_user_cookie_auth(client, "Subaru", "BRZ")
+
+    # No build lists created for this car
+
+    client.cookies.clear() # Endpoint is public
+    response = client.get(f"{settings.API_STR}/build_lists/car/{car_id}")
+    assert response.status_code == 200, response.text
+    
+    build_lists = response.json()
+    assert isinstance(build_lists, list)
+    assert len(build_lists) == 0
+
+
+def test_read_build_lists_by_car_car_not_found(client: TestClient, db_session: Session):
+    non_existent_car_id = 999888
+    
+    client.cookies.clear() # Endpoint is public
+    response = client.get(f"{settings.API_STR}/build_lists/car/{non_existent_car_id}")
+    assert response.status_code == 200, response.text # Endpoint returns 200 and empty list
+    
+    build_lists = response.json()
+    assert isinstance(build_lists, list)
+    assert len(build_lists) == 0

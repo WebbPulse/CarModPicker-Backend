@@ -375,3 +375,86 @@ def test_delete_other_users_part_forbidden(client: TestClient, db_session: Sessi
     response = client.delete(f"{settings.API_STR}/parts/{part_id_a}")
     assert response.status_code == 403
     assert response.json()["detail"] == "Not authorized to delete this part"
+
+
+# Tests for read_parts_by_build_list
+def test_read_parts_by_build_list_success(client: TestClient, db_session: Session):
+    user_id = create_and_login_user(client, "owner_for_parts_by_bl")
+    car_id = create_car_for_user_cookie_auth(client)
+    build_list_id = create_build_list_for_car_cookie_auth(client, car_id, "BL_for_Parts_Read")
+
+    # Create a couple of parts for this build list
+    part_data1 = {
+        "name": "Part 1 for BL",
+        "part_type": "Engine",
+        "build_list_id": build_list_id,
+    }
+    part_data2 = {
+        "name": "Part 2 for BL",
+        "manufacturer": "BrandY",
+        "build_list_id": build_list_id,
+    }
+
+    create_response1 = client.post(f"{settings.API_STR}/parts/", json=part_data1)
+    assert create_response1.status_code == 200
+    part_id1 = create_response1.json()["id"]
+
+    create_response2 = client.post(f"{settings.API_STR}/parts/", json=part_data2)
+    assert create_response2.status_code == 200
+    part_id2 = create_response2.json()["id"]
+
+    # Endpoint is public, clear cookies if desired, though not strictly necessary
+    client.cookies.clear()
+    response = client.get(f"{settings.API_STR}/parts/build_list/{build_list_id}")
+    assert response.status_code == 200, response.text
+
+    parts_list = response.json()
+    assert isinstance(parts_list, list)
+    assert len(parts_list) == 2
+
+    retrieved_part_ids = {part["id"] for part in parts_list}
+    assert part_id1 in retrieved_part_ids
+    assert part_id2 in retrieved_part_ids
+
+    for part in parts_list:
+        assert part["build_list_id"] == build_list_id
+        if part["id"] == part_id1:
+            assert part["name"] == part_data1["name"]
+            assert part["part_type"] == part_data1["part_type"]
+        elif part["id"] == part_id2:
+            assert part["name"] == part_data2["name"]
+            assert part["manufacturer"] == part_data2["manufacturer"]
+
+
+def test_read_parts_by_build_list_empty(client: TestClient, db_session: Session):
+    user_id = create_and_login_user(client, "owner_for_empty_parts_by_bl")
+    car_id = create_car_for_user_cookie_auth(client)
+    build_list_id = create_build_list_for_car_cookie_auth(
+        client, car_id, "BL_Empty_Parts_Read"
+    )
+
+    # No parts created for this build list
+
+    client.cookies.clear()
+    response = client.get(f"{settings.API_STR}/parts/build_list/{build_list_id}")
+    assert response.status_code == 200, response.text
+
+    parts_list = response.json()
+    assert isinstance(parts_list, list)
+    assert len(parts_list) == 0
+
+
+def test_read_parts_by_build_list_build_list_not_found(
+    client: TestClient, db_session: Session
+):
+    non_existent_build_list_id = 999666
+
+    client.cookies.clear()
+    response = client.get(
+        f"{settings.API_STR}/parts/build_list/{non_existent_build_list_id}"
+    )
+    assert response.status_code == 200, response.text  # Endpoint returns 200 and empty list
+
+    parts_list = response.json()
+    assert isinstance(parts_list, list)
+    assert len(parts_list) == 0
