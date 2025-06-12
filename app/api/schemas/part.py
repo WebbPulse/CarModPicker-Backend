@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
+
 # Schema for request body when creating/updating a part
 class PartCreate(BaseModel):
     name: str
@@ -9,7 +10,9 @@ class PartCreate(BaseModel):
     manufacturer: Optional[str] = None
     description: Optional[str] = None
     price: Optional[int] = None
+    image_url: Optional[str] = None
     build_list_id: int
+
 
 # Schema for request body when updating a part (all fields optional)
 class PartUpdate(BaseModel):
@@ -19,8 +22,9 @@ class PartUpdate(BaseModel):
     manufacturer: Optional[str] = None
     description: Optional[str] = None
     price: Optional[int] = None
+    image_url: Optional[str] = None
     build_list_id: Optional[int] = None
-    
+
 
 # Schema for response body when reading a part
 class PartRead(BaseModel):
@@ -31,7 +35,7 @@ class PartRead(BaseModel):
     manufacturer: Optional[str] = None
     description: Optional[str] = None
     price: Optional[int] = None
+    image_url: Optional[str] = None
     build_list_id: int
-
 
     model_config = ConfigDict(from_attributes=True)

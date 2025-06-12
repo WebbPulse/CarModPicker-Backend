@@ -15,6 +15,7 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     disabled: Optional[bool] = None
     password: Optional[str] = None
+    image_url: Optional[str] = None
     current_password: str
 
 
@@ -25,5 +26,6 @@ class UserRead(BaseModel):
     email: EmailStr
     disabled: bool
     email_verified: bool
+    image_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
