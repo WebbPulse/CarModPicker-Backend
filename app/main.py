@@ -18,7 +18,7 @@ app = FastAPI(
 app.include_router(users.router, prefix=settings.API_STR + "/users", tags=["users"])
 app.include_router(cars.router, prefix=settings.API_STR + "/cars", tags=["cars"])
 app.include_router(
-    build_lists.router, prefix=settings.API_STR + "/build_lists", tags=["build_lists"]
+    build_lists.router, prefix=settings.API_STR + "/build-lists", tags=["build-lists"]
 )
 app.include_router(parts.router, prefix=settings.API_STR + "/parts", tags=["parts"])
 app.include_router(
