@@ -118,7 +118,7 @@ async def read_part(
 
 
 @router.get(
-    "/build_list/{build_list_id}",
+    "/build-list/{build_list_id}",
     response_model=list[PartRead],
     tags=["parts"],
 )
