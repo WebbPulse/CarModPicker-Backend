@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: fastapi-backend
-        image: webbpulse/personal-projects:CMPB-latest
+        image: webbpulse/carmodpicker:backend-latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000

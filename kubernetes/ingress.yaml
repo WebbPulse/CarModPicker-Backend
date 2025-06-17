@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: carmodpicker-ingress
+  annotations:
+    # If using Nginx Ingress controller, you might need a rewrite rule for the backend
+    # For example, if your backend API paths don't include /api/v1 internally
+    # nginx.ingress.kubernetes.io/rewrite-target: /$2 
+    # This depends on your backend's routing and Ingress controller specifics.
+    # For now, we assume backend expects /api/v1/... paths directly.
+    nginx.ingress.kubernetes.io/proxy-body-size: "8m" # Example: Allow larger request bodies if needed
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: carmodpicker-backend-svc # From your backend-service.yaml
+            port:
+              number: 8000 # Port exposed by carmodpicker-backend-svc
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: carmodpicker-frontend-svc # From your new frontend-service.yaml
+            port:
+              number: 80 # Port exposed by carmodpicker-frontend-svc
