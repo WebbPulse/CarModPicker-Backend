@@ -9,4 +9,4 @@ spec:
   - protocol: TCP
     port: 8000 # Port the service will listen on
     targetPort: 8000 # Port the pods are listening on
-  type: LoadBalancer
+  type: ClusterIP
