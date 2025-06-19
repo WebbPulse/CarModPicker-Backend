@@ -14,6 +14,8 @@ spec:
       labels:
         app: carmodpicker-backend
     spec:
+      imagePullSecrets:
+        - name: regcred 
       containers:
       - name: fastapi-backend
         image: webbpulse/carmodpicker:backend-latest
