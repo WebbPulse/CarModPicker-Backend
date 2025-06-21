@@ -1,3 +1,6 @@
+#WIP README
+
+
 Useful commands:
 - docker compose up -d
     - to build the backend, the prod db, and the test db for unit tests
