@@ -3,16 +3,17 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError  # Import IntegrityError
 import logging
 
-from ...core.logging import get_logger
-from ...core.config import settings
-from ...db.session import get_db
-from ...api.models.user import User as DBUser
-from ...api.schemas.user import (
+from app.core.logging import get_logger
+from app.core.config import settings
+from app.db.session import get_db
+from app.api.models.user import User as DBUser
+from app.api.schemas.user import (
     UserCreate,
     UserRead,
     UserUpdate,
 )  # Ensure UserUpdate in app/api/schemas/user.py includes 'current_password: str'
-from ...api.dependencies.auth import (
+
+from app.api.dependencies.auth import (
     get_password_hash,
     get_current_user,
     verify_password,
