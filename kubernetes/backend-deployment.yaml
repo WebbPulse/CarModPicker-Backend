@@ -16,6 +16,37 @@ spec:
     spec:
       imagePullSecrets:
         - name: regcred 
+      initContainers:
+      - name: wait-for-db
+        image: postgres:16
+        command: ['sh', '-c', 
+          'until pg_isready -h postgres-svc -p 5432 -U $POSTGRES_USER; do echo waiting for database; sleep 2; done; echo database is ready']
+        envFrom:
+        - secretRef:
+            name: postgres-secrets
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+      - name: db-migrate
+        image: webbpulse/carmodpicker:backend-latest
+        imagePullPolicy: Always
+        command: ["alembic", "upgrade", "head"]
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        - secretRef:
+            name: backend-secrets
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
       containers:
       - name: fastapi-backend
         image: webbpulse/carmodpicker:backend-latest

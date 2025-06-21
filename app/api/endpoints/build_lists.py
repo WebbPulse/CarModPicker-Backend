@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import logging
 
-from ...core.logging import get_logger
-from ...db.session import get_db
-from ...api.models.build_list import BuildList as DBBuildList
-from ...api.models.car import Car as DBCar
-from ...api.models.user import User as DBUser
-from ...api.schemas.build_list import BuildListCreate, BuildListRead, BuildListUpdate
-from ...api.dependencies.auth import get_current_user
+from app.core.logging import get_logger
+from app.db.session import get_db
+from app.api.models.build_list import BuildList as DBBuildList
+from app.api.models.car import Car as DBCar
+from app.api.models.user import User as DBUser
+from app.api.schemas.build_list import BuildListCreate, BuildListRead, BuildListUpdate
+from app.api.dependencies.auth import get_current_user
 
 
 # Shared function to verify car ownership
@@ -17,8 +17,8 @@ async def _verify_car_ownership(
     db: Session,
     current_user: DBUser,
     logger: logging.Logger,
-    car_not_found_detail: str = None,
-    authorization_detail: str = None,
+    car_not_found_detail: str | None = None,
+    authorization_detail: str | None = None,
 ) -> DBCar:
     db_car = db.query(DBCar).filter(DBCar.id == car_id).first()
     if not db_car:
@@ -146,7 +146,7 @@ async def update_build_list(
 
     # Verify car ownership for the build list
     await _verify_car_ownership(
-        car_id=db_build_list.car_id,
+        car_id=int(db_build_list.car_id),
         db=db,
         current_user=current_user,
         logger=logger,
@@ -199,7 +199,7 @@ async def delete_build_list(
 
     # Verify car ownership for the build list
     await _verify_car_ownership(
-        car_id=db_build_list.car_id,
+        car_id=int(db_build_list.car_id),
         db=db,
         current_user=current_user,
         logger=logger,

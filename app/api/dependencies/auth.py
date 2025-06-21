@@ -7,10 +7,10 @@ from jose import JWTError, jwt
 import bcrypt
 from sqlalchemy.orm import Session
 
-from ...core.config import settings
-from ...db.session import get_db
-from ...api.models.user import User as DBUser
-from ...api.schemas.token import TokenData
+from app.core.config import settings
+from app.db.session import get_db
+from app.api.models.user import User as DBUser
+from app.api.schemas.token import TokenData
 
 ALGORITHM = settings.HASH_ALGORITHM  # Add this line
 

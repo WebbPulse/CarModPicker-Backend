@@ -2,14 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import logging
 
-from ...core.logging import get_logger
-from ...db.session import get_db
-from ...api.models.part import Part as DBPart
-from ...api.models.car import Car as DBCar
-from ...api.models.user import User as DBUser
-from ...api.models.build_list import BuildList as DBBuildList
-from ...api.schemas.part import PartCreate, PartRead, PartUpdate
-from ...api.dependencies.auth import get_current_user
+from app.core.logging import get_logger
+from app.db.session import get_db
+from app.api.models.part import Part as DBPart
+from app.api.models.car import Car as DBCar
+from app.api.models.user import User as DBUser
+from app.api.models.build_list import BuildList as DBBuildList
+from app.api.schemas.part import PartCreate, PartRead, PartUpdate
+from app.api.dependencies.auth import get_current_user
 
 
 # Shared function to verify build list ownership (via car)
@@ -18,12 +18,13 @@ async def _verify_build_list_ownership(
     db: Session,
     current_user: DBUser,
     logger: logging.Logger,
-    build_list_not_found_detail: str = None,
-    authorization_detail: str = None,
+    build_list_not_found_detail: str | None = None,
+    authorization_detail: str | None = None,
 ) -> DBBuildList:
     db_build_list = (
         db.query(DBBuildList).filter(DBBuildList.id == build_list_id).first()
     )
+
     if not db_build_list:
         detail = (
             build_list_not_found_detail

@@ -5,16 +5,16 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from jose import JWTError, jwt
 
-from ...db.session import get_db
-from ...api.models.user import User as DBUser
-from ...api.schemas.user import UserRead
-from ...api.schemas.auth import NewPassword  # Added this import
-from ...api.dependencies.auth import (
+from app.db.session import get_db
+from app.api.models.user import User as DBUser
+from app.api.schemas.user import UserRead
+from app.api.schemas.auth import NewPassword  # Added this import
+from app.api.dependencies.auth import (
     verify_password,
     create_access_token,
     get_password_hash,
 )  # Added get_password_hash
-from ...core.config import settings
+from app.core.config import settings
 from app.core.email import send_email
 
 router = APIRouter()
@@ -168,8 +168,8 @@ async def reset_password_confirm(
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.HASH_ALGORITHM]
         )
-        email: str = payload.get("sub")
-        purpose: str = payload.get("purpose")
+        email = payload.get("sub")
+        purpose = payload.get("purpose")
         if email is None or purpose != "reset_password":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

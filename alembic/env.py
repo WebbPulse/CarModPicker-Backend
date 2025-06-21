@@ -1,16 +1,18 @@
 from logging.config import fileConfig
-import os 
+import os
 import sys
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from sqlalchemy import create_engine
 from alembic import context
 
+# Add the app directory to Python path so we can import app modules
+sys.path.insert(0, "/app")
 
 # Load .env file variables into environment
 # Assumes .env is in the project root (one level up from alembic dir)
-dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 
@@ -22,14 +24,27 @@ from app.db.base import Base
 config = context.config
 
 # Get the database URL from the environment variable
-# Fallback to the value in alembic.ini if the env var is not set (optional)
-ALEMBIC_DATABASE_URL = os.getenv("ALEMBIC_DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+# Fallback to DATABASE_URL if ALEMBIC_DATABASE_URL is not set, then to the value in alembic.ini
+ALEMBIC_DATABASE_URL = (
+    os.getenv("ALEMBIC_DATABASE_URL")
+    or os.getenv("DATABASE_URL")
+    or config.get_main_option("sqlalchemy.url")
+)
+
+# Debug logging
+print(f"ALEMBIC_DATABASE_URL from env: {os.getenv('ALEMBIC_DATABASE_URL')}")
+print(f"DATABASE_URL from env: {os.getenv('DATABASE_URL')}")
+print(f"sqlalchemy.url from config: {config.get_main_option('sqlalchemy.url')}")
+print(f"Final ALEMBIC_DATABASE_URL: {ALEMBIC_DATABASE_URL}")
+
 if not ALEMBIC_DATABASE_URL:
-    raise ValueError("ALEMBIC_DATABASE_URL environment variable not set and sqlalchemy.url is not configured in alembic.ini")
+    raise ValueError(
+        "Neither ALEMBIC_DATABASE_URL nor DATABASE_URL environment variables are set, and sqlalchemy.url is not configured in alembic.ini"
+    )
 
 # Update the config object so engine_from_config can use it if needed,
 # but we'll primarily use the ALEMBIC_DATABASE_URL variable directly.
-config.set_main_option('sqlalchemy.url', ALEMBIC_DATABASE_URL)
+config.set_main_option("sqlalchemy.url", ALEMBIC_DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -62,7 +77,7 @@ def run_migrations_offline() -> None:
     """
     # Use the ALEMBIC_DATABASE_URL obtained from environment or config
     context.configure(
-        url=ALEMBIC_DATABASE_URL, # Use the variable directly
+        url=ALEMBIC_DATABASE_URL,  # Use the variable directly
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -80,12 +95,11 @@ def run_migrations_online() -> None:
 
     """
     # Create engine directly using the ALEMBIC_DATABASE_URL
-    connectable = create_engine(ALEMBIC_DATABASE_URL, poolclass=pool.NullPool)
+    # We know ALEMBIC_DATABASE_URL is not None because of the check above
+    connectable = create_engine(str(ALEMBIC_DATABASE_URL), poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

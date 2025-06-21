@@ -1,20 +1,19 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.orm import relationship
-from ...db.base_class import Base
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import ForeignKey
+from typing import List, Optional
+from app.db.base_class import Base
 
 
 class BuildList(Base):
     __tablename__ = "build_lists"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)
-    description = Column(String, index=True, nullable=True)
-    image_url = Column(String, nullable=True)
-    car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(index=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(index=True, nullable=True)
+    image_url: Mapped[Optional[str]] = mapped_column(nullable=True)
+    car_id: Mapped[int] = mapped_column(ForeignKey("cars.id"), nullable=False)
 
     # owner
-    car = relationship("Car", back_populates="build_lists")
+    car: Mapped["Car"] = relationship("Car", back_populates="build_lists")  # type: ignore
     # children
-    parts = relationship(
-        "Part", back_populates="build_list", cascade="all, delete-orphan"
-    )
+    parts: Mapped[List["Part"]] = relationship("Part", back_populates="build_list", cascade="all, delete-orphan")  # type: ignore

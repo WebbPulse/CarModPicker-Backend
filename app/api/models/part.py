@@ -1,20 +1,23 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.orm import relationship
-from ...db.base_class import Base
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import ForeignKey
+from typing import Optional
+from app.db.base_class import Base
 
 
 class Part(Base):
     __tablename__ = "parts"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)
-    part_type = Column(String, index=True, nullable=True)
-    part_number = Column(String, index=True, nullable=True)
-    manufacturer = Column(String, index=True, nullable=True)
-    description = Column(String, index=True, nullable=True)
-    price = Column(Integer, index=True, nullable=True)
-    image_url = Column(String, nullable=True)
-    build_list_id = Column(Integer, ForeignKey("build_lists.id"), nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(index=True, nullable=False)
+    part_type: Mapped[Optional[str]] = mapped_column(index=True, nullable=True)
+    part_number: Mapped[Optional[str]] = mapped_column(index=True, nullable=True)
+    manufacturer: Mapped[Optional[str]] = mapped_column(index=True, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(index=True, nullable=True)
+    price: Mapped[Optional[int]] = mapped_column(index=True, nullable=True)
+    image_url: Mapped[Optional[str]] = mapped_column(nullable=True)
+    build_list_id: Mapped[int] = mapped_column(
+        ForeignKey("build_lists.id"), nullable=False
+    )
 
     # owner
-    build_list = relationship("BuildList", back_populates="parts")
+    build_list: Mapped["BuildList"] = relationship("BuildList", back_populates="parts")  # type: ignore
