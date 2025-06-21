@@ -18,12 +18,13 @@ async def _verify_build_list_ownership(
     db: Session,
     current_user: DBUser,
     logger: logging.Logger,
-    build_list_not_found_detail: str = None,
-    authorization_detail: str = None,
+    build_list_not_found_detail: str | None = None,
+    authorization_detail: str | None = None,
 ) -> DBBuildList:
     db_build_list = (
         db.query(DBBuildList).filter(DBBuildList.id == build_list_id).first()
     )
+
     if not db_build_list:
         detail = (
             build_list_not_found_detail

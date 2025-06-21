@@ -17,8 +17,8 @@ async def _verify_car_ownership(
     db: Session,
     current_user: DBUser,
     logger: logging.Logger,
-    car_not_found_detail: str = None,
-    authorization_detail: str = None,
+    car_not_found_detail: str | None = None,
+    authorization_detail: str | None = None,
 ) -> DBCar:
     db_car = db.query(DBCar).filter(DBCar.id == car_id).first()
     if not db_car:
@@ -146,7 +146,7 @@ async def update_build_list(
 
     # Verify car ownership for the build list
     await _verify_car_ownership(
-        car_id=db_build_list.car_id,
+        car_id=int(db_build_list.car_id),
         db=db,
         current_user=current_user,
         logger=logger,
@@ -199,7 +199,7 @@ async def delete_build_list(
 
     # Verify car ownership for the build list
     await _verify_car_ownership(
-        car_id=db_build_list.car_id,
+        car_id=int(db_build_list.car_id),
         db=db,
         current_user=current_user,
         logger=logger,

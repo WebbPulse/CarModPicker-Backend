@@ -168,8 +168,8 @@ async def reset_password_confirm(
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.HASH_ALGORITHM]
         )
-        email: str = payload.get("sub")
-        purpose: str = payload.get("purpose")
+        email = payload.get("sub")
+        purpose = payload.get("purpose")
         if email is None or purpose != "reset_password":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
