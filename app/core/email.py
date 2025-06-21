@@ -1,6 +1,6 @@
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, From, To
-from ..core.logging import logger
+from app.core.logging import logger
 
 from app.core.config import settings
 
